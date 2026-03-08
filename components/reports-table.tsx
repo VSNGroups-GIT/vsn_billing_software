@@ -10,7 +10,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { ArrowUp, ArrowDown, ArrowUpDown, Search } from "lucide-react"
+import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { usePagination } from "@/hooks/use-pagination"
+import { TablePagination } from "@/components/table-pagination"
 
 type ClientRow = {
   id: string
@@ -22,8 +24,6 @@ type ClientRow = {
   oldBal: number
 }
 
-type SortKey = "name" | "oldBal" | "sale" | "saleKgs" | "avgQty" | "payments" | "outstanding"
-
 interface ReportsTableProps {
   rows: ClientRow[]
   daysInMonth: number
@@ -31,53 +31,100 @@ interface ReportsTableProps {
 }
 
 export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProps) {
-  const [search, setSearch] = useState("")
-  const [sortKey, setSortKey] = useState<SortKey | null>(null)
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
 
-  const fmt = (n: number) =>
-    n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+  // Filter state
+  const [filters, setFilters] = useState({ hotel: "" })
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
     } else {
-      setSortKey(key)
-      setSortDir(key === "name" ? "asc" : "desc")
+      setSortColumn(column)
+      setSortDirection("asc")
     }
   }
 
-  const filtered = useMemo(() => {
-    let result = rows
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      result = result.filter((r) => r.name.toLowerCase().includes(q))
+  const handleFilterChange = (column: string, value: string) => {
+    setFilters((prev) => ({ ...prev, [column]: value }))
+  }
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column)
+      return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
+    return sortDirection === "asc" ? (
+      <ArrowUp className="ml-2 h-4 w-4 inline" />
+    ) : (
+      <ArrowDown className="ml-2 h-4 w-4 inline" />
+    )
+  }
+
+  const processedRows = useMemo(() => {
+    let filtered = [...rows]
+
+    if (filters.hotel) {
+      filtered = filtered.filter((r) =>
+        r.name.toLowerCase().includes(filters.hotel.toLowerCase()),
+      )
     }
-    if (sortKey) {
-      result = [...result].sort((a, b) => {
-        let av: number | string
-        let bv: number | string
-        if (sortKey === "name") {
-          av = a.name.toLowerCase()
-          bv = b.name.toLowerCase()
-        } else if (sortKey === "avgQty") {
-          av = a.saleKgs / daysInMonth
-          bv = b.saleKgs / daysInMonth
-        } else {
-          av = a[sortKey]
-          bv = b[sortKey]
+
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let aVal: any
+        let bVal: any
+
+        switch (sortColumn) {
+          case "hotel":
+            aVal = a.name.toLowerCase()
+            bVal = b.name.toLowerCase()
+            break
+          case "oldBal":
+            aVal = a.oldBal
+            bVal = b.oldBal
+            break
+          case "sale":
+            aVal = a.sale
+            bVal = b.sale
+            break
+          case "saleKgs":
+            aVal = a.saleKgs
+            bVal = b.saleKgs
+            break
+          case "avgQty":
+            aVal = a.saleKgs / daysInMonth
+            bVal = b.saleKgs / daysInMonth
+            break
+          case "payments":
+            aVal = a.payments
+            bVal = b.payments
+            break
+          case "outstanding":
+            aVal = a.outstanding
+            bVal = b.outstanding
+            break
+          default:
+            return 0
         }
-        if (av < bv) return sortDir === "asc" ? -1 : 1
-        if (av > bv) return sortDir === "asc" ? 1 : -1
+
+        if (aVal < bVal) return sortDirection === "asc" ? -1 : 1
+        if (aVal > bVal) return sortDirection === "asc" ? 1 : -1
         return 0
       })
     }
-    return result
-  }, [rows, search, sortKey, sortDir, daysInMonth])
+
+    return filtered
+  }, [rows, filters, sortColumn, sortDirection, daysInMonth])
+
+  const pagination = usePagination({ items: processedRows, itemsPerPage })
 
   const totals = useMemo(
     () =>
-      filtered.reduce(
+      processedRows.reduce(
         (acc, r) => ({
           oldBal: acc.oldBal + r.oldBal,
           sale: acc.sale + r.sale,
@@ -87,61 +134,73 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
         }),
         { oldBal: 0, sale: 0, saleKgs: 0, payments: 0, outstanding: 0 },
       ),
-    [filtered],
+    [processedRows],
   )
 
-  const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-40 inline" />
-    return sortDir === "asc"
-      ? <ArrowUp className="ml-1 h-3 w-3 inline" />
-      : <ArrowDown className="ml-1 h-3 w-3 inline" />
-  }
-
-  const thClass = (col: SortKey, right = true) =>
-    `cursor-pointer select-none hover:bg-muted/50 transition-colors px-2 sm:px-4 py-2 sm:py-3${right ? " text-right" : ""}`
+  const fmt = (n: number) =>
+    n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   return (
-    <div className="space-y-3">
-      {/* Search / filter */}
-      <div className="relative w-full sm:w-64">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search hotel…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-8 h-9 text-sm"
-        />
-      </div>
-
-      {/* Table */}
+    <div className="space-y-4">
       <div className="rounded-lg border bg-white overflow-x-auto">
         <Table className="text-xs sm:text-sm">
           <TableHeader>
+            {/* Column headers — sortable */}
             <TableRow>
-              <TableHead className={thClass("name", false)} onClick={() => handleSort("name")}>
-                Hotel <SortIcon col="name" />
+              <TableHead
+                className="px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("hotel")}
+              >
+                Hotel <SortIcon column="hotel" />
               </TableHead>
-              <TableHead className={thClass("oldBal")} onClick={() => handleSort("oldBal")}>
-                Old Bal <SortIcon col="oldBal" />
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("oldBal")}
+              >
+                Old Bal <SortIcon column="oldBal" />
               </TableHead>
-              <TableHead className={thClass("sale")} onClick={() => handleSort("sale")}>
-                Sale <SortIcon col="sale" />
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("sale")}
+              >
+                Sale <SortIcon column="sale" />
               </TableHead>
-              <TableHead className={thClass("saleKgs")} onClick={() => handleSort("saleKgs")}>
-                Sale KGS <SortIcon col="saleKgs" />
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("saleKgs")}
+              >
+                Sale KGS <SortIcon column="saleKgs" />
               </TableHead>
-              <TableHead className={thClass("avgQty")} onClick={() => handleSort("avgQty")}>
-                Avg Qty <SortIcon col="avgQty" />
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("avgQty")}
+              >
+                Avg Qty <SortIcon column="avgQty" />
               </TableHead>
-              <TableHead className={thClass("payments")} onClick={() => handleSort("payments")}>
-                Payments <SortIcon col="payments" />
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("payments")}
+              >
+                Payments <SortIcon column="payments" />
               </TableHead>
-              <TableHead className={thClass("outstanding")} onClick={() => handleSort("outstanding")}>
-                Outstanding <SortIcon col="outstanding" />
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("outstanding")}
+              >
+                Outstanding <SortIcon column="outstanding" />
               </TableHead>
             </TableRow>
+
+            {/* Filter / sub-header row */}
             <TableRow>
-              <TableHead className="px-2 sm:px-4 py-1.5 font-normal text-muted-foreground" />
+              <TableHead className="px-2 sm:px-4 py-1.5">
+                <Input
+                  placeholder="Filter hotel…"
+                  value={filters.hotel}
+                  onChange={(e) => handleFilterChange("hotel", e.target.value)}
+                  className="h-7 text-xs font-normal"
+                />
+              </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
                 Outstanding − Current month Sale
               </TableHead>
@@ -166,16 +225,23 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           </TableHeader>
 
           <TableBody>
-            {filtered.length === 0 ? (
+            {pagination.paginatedItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-16 px-2 sm:px-4">
-                  {search ? `No hotels matching "${search}".` : `No activity found for ${monthLabel}.`}
+                <TableCell
+                  colSpan={7}
+                  className="text-center text-muted-foreground py-16 px-2 sm:px-4"
+                >
+                  {filters.hotel
+                    ? `No hotels matching "${filters.hotel}".`
+                    : `No activity found for ${monthLabel}.`}
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((row) => (
+              pagination.paginatedItems.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3">{row.name}</TableCell>
+                  <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3">
+                    {row.name}
+                  </TableCell>
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                     {row.oldBal > 0 ? `₹${fmt(row.oldBal)}` : "—"}
                   </TableCell>
@@ -189,7 +255,9 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                     {row.saleKgs > 0 ? (
                       <>
                         {(row.saleKgs / daysInMonth).toFixed(2)}
-                        <span className="text-muted-foreground ml-1">/ {daysInMonth}d</span>
+                        <span className="text-muted-foreground ml-1">
+                          / {daysInMonth}d
+                        </span>
                       </>
                     ) : (
                       "—"
@@ -205,25 +273,42 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
               ))
             )}
 
-            {/* Totals row — always based on filtered rows */}
-            {filtered.length > 0 && (
+            {/* Totals row — based on all filtered rows (not just current page) */}
+            {processedRows.length > 0 && (
               <TableRow className="border-t-2 font-bold bg-muted/30">
-                <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
-                  Total Sale {search && <span className="font-normal text-muted-foreground text-xs ml-1">({filtered.length} hotels)</span>}
+                <TableCell className="px-2 sm:px-4 py-2 sm:py-3">Total Sale</TableCell>
+                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
+                  ₹{fmt(totals.oldBal)}
                 </TableCell>
-                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">₹{fmt(totals.oldBal)}</TableCell>
-                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">₹{fmt(totals.sale)}</TableCell>
+                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
+                  ₹{fmt(totals.sale)}
+                </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                   {totals.saleKgs > 0 ? totals.saleKgs.toFixed(2) : "0"}
                 </TableCell>
-                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-normal text-muted-foreground">—</TableCell>
-                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-green-700">₹{fmt(totals.payments)}</TableCell>
-                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-orange-700">₹{fmt(totals.outstanding)}</TableCell>
+                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-normal text-muted-foreground">
+                  —
+                </TableCell>
+                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-green-700">
+                  ₹{fmt(totals.payments)}
+                </TableCell>
+                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-orange-700">
+                  ₹{fmt(totals.outstanding)}
+                </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={pagination.goToPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
     </div>
   )
 }
