@@ -151,13 +151,13 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 className="px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("hotel")}
               >
-                Hotel <SortIcon column="hotel" />
+                Clients <SortIcon column="hotel" />
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("oldBal")}
               >
-                Old Bal <SortIcon column="oldBal" />
+                Old balance <SortIcon column="oldBal" />
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
@@ -169,13 +169,13 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("saleKgs")}
               >
-                Sale KGS <SortIcon column="saleKgs" />
+                Sale in KGs <SortIcon column="saleKgs" />
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("avgQty")}
               >
-                Avg Qty <SortIcon column="avgQty" />
+                Average quantity <SortIcon column="avgQty" />
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
@@ -195,31 +195,31 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
             <TableRow>
               <TableHead className="px-2 sm:px-4 py-1.5">
                 <Input
-                  placeholder="Filter hotel…"
+                  placeholder="Filter clients…"
                   value={filters.hotel}
                   onChange={(e) => handleFilterChange("hotel", e.target.value)}
                   className="h-7 text-xs font-normal"
                 />
               </TableHead>
-              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                Outstanding − Current month Sale
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
+                Outstanding - Current month Sale
               </TableHead>
-              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                Current Month Sale
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
+                Current month sale
               </TableHead>
-              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                Total Purchased Qty
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
+                Total purchased quantity 
               </TableHead>
-              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground leading-tight">
-                Avg Qty per Day
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground leading-tight text-xs">
+                Average quantity per day
                 <br />
                 Total / {daysInMonth} days
               </TableHead>
-              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                Current Month Payments
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
+                Current month payments
               </TableHead>
-              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                Total Outstanding
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
+                Total outstanding
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -255,9 +255,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                     {row.saleKgs > 0 ? (
                       <>
                         {(row.saleKgs / daysInMonth).toFixed(2)}
-                        <span className="text-muted-foreground ml-1">
-                          / {daysInMonth}d
-                        </span>
+                        {/* <span className="text-muted-foreground ml-1">/ {daysInMonth}d</span> */}
                       </>
                     ) : (
                       "—"
