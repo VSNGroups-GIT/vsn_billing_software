@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Trash2,
   Download,
+  FileText,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -35,7 +36,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
+import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
 
 interface Payment {
@@ -60,6 +61,8 @@ interface Payment {
 interface PaymentsTableProps {
   payments: Payment[];
   toolbarLeft?: ReactNode;
+  fromDate?: string;
+  toDate?: string;
 }
 
 const statusConfig = {
@@ -69,7 +72,7 @@ const statusConfig = {
   refunded: { label: "Refunded", className: "bg-slate-100 text-slate-800" },
 };
 
-export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
+export function PaymentsTable({ payments, toolbarLeft, fromDate = "", toDate = "" }: PaymentsTableProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -90,6 +93,7 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
     method: "",
   });
 
+  // Date range filter (by payment_date)
   const handleSort = (column: string) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -372,19 +376,77 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
     });
   };
 
+  const handleExportPDF = async () => {
+    const enrichedPayments = processedPayments.map((p) => ({
+      ...p,
+      invoice_number: p.invoices.invoice_number,
+      client_name: p.invoices.clients.name,
+      amount_fmt: `Rs.${Number(p.amount).toFixed(2)}`,
+      payment_date_fmt: new Date(p.payment_date).toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }),
+      method_label: p.payment_method.replace(/_/g, " "),
+      status_label:
+        statusConfig[p.status as keyof typeof statusConfig]?.label || p.status,
+    }));
+
+    const pdfColumns: ExportColumn[] = [
+      { key: "payment_date_fmt", label: "Date" },
+      { key: "invoice_number", label: "Invoice #" },
+      { key: "client_name", label: "Client" },
+      { key: "amount_fmt", label: "Amount" },
+      { key: "method_label", label: "Method" },
+      { key: "reference_number", label: "Reference" },
+      { key: "status_label", label: "Status" },
+    ];
+
+    const rangeLabel =
+      fromDate || toDate
+        ? ` (${fromDate || "..."} to ${toDate || "..."})`
+        : "";
+    await exportToPDF(
+      enrichedPayments,
+      pdfColumns,
+      `Payments${rangeLabel}`,
+      `payments-${getTimestamp()}.pdf`,
+    );
+    toast({
+      variant: "success",
+      title: "Exported",
+      description: `${enrichedPayments.length} payment(s) exported to PDF successfully.`,
+    });
+  };
+
   return (
     <>
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-        <div className="flex flex-wrap items-center gap-2">{toolbarLeft}</div>
-        <Button
-          onClick={handleExport}
-          size="sm"
-          variant="outline"
-          title="Export to CSV"
-          disabled={processedPayments.length === 0}
-        >
-          <Download className="h-4 w-4" />
-        </Button>
+      <div className="flex flex-col gap-3 sm:gap-4 mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">{toolbarLeft}</div>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleExport}
+              size="sm"
+              variant="outline"
+              title="Export to CSV"
+              disabled={processedPayments.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline ml-2">CSV</span>
+            </Button>
+            <Button
+              onClick={handleExportPDF}
+              size="sm"
+              variant="outline"
+              title="Export to PDF"
+              disabled={processedPayments.length === 0}
+            >
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline ml-2">PDF</span>
+            </Button>
+          </div>
+        </div>
       </div>
 
       {processedPayments.length === 0 ? (

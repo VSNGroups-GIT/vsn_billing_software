@@ -17,6 +17,7 @@ import {
   Pencil,
   Trash2,
   Download,
+  FileText,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -27,7 +28,7 @@ import { useRouter } from "next/navigation";
 import { useState, useMemo, ReactNode } from "react";
 import { usePagination } from "@/hooks/use-pagination";
 import { TablePagination } from "@/components/table-pagination";
-import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
+import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
@@ -59,6 +60,8 @@ interface InvoicesTableProps {
   invoices: Invoice[];
   toolbarLeft?: ReactNode;
   userRole?: string;
+  fromDate?: string;
+  toDate?: string;
 }
 
 const statusConfig = {
@@ -77,6 +80,8 @@ export function InvoicesTable({
   invoices,
   toolbarLeft,
   userRole,
+  fromDate = "",
+  toDate = "",
 }: InvoicesTableProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -98,6 +103,7 @@ export function InvoicesTable({
     status: "",
   });
 
+  // Date range filter (by issue_date)
   const handleSort = (column: string) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -300,21 +306,86 @@ export function InvoicesTable({
     });
   };
 
+  const handleExportPDF = async () => {
+    const enrichedInvoices = processedInvoices.map((invoice) => ({
+      ...invoice,
+      client_name: invoice.clients.name,
+      issue_date_fmt: new Date(invoice.issue_date).toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }),
+      due_date_display:
+        invoice.due_days_type === "end_of_month"
+          ? "End of billed month"
+          : new Date(invoice.due_date).toLocaleDateString("en-IN", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+            }),
+      total_fmt: `Rs.${Number(invoice.total_amount).toFixed(2)}`,
+      paid_fmt: `Rs.${Number(invoice.amount_paid).toFixed(2)}`,
+      due_fmt: `Rs.${(Number(invoice.total_amount) - Number(invoice.amount_paid)).toFixed(2)}`,
+      status_label:
+        statusConfig[invoice.status as keyof typeof statusConfig]?.label ||
+        invoice.status,
+    }));
+
+    const pdfColumns: ExportColumn[] = [
+      { key: "invoice_number", label: "Invoice #" },
+      { key: "client_name", label: "Client" },
+      { key: "issue_date_fmt", label: "Issue Date" },
+      { key: "due_date_display", label: "Due Date" },
+      { key: "total_fmt", label: "Total" },
+      { key: "paid_fmt", label: "Paid" },
+      { key: "due_fmt", label: "Due" },
+      { key: "status_label", label: "Status" },
+    ];
+
+    const rangeLabel =
+      fromDate || toDate
+        ? ` (${fromDate || "..."} to ${toDate || "..."})`
+        : "";
+    await exportToPDF(
+      enrichedInvoices,
+      pdfColumns,
+      `Invoices${rangeLabel}`,
+      `invoices-${getTimestamp()}.pdf`,
+    );
+    toast({
+      variant: "success",
+      title: "Exported",
+      description: `${enrichedInvoices.length} invoice(s) exported to PDF successfully.`,
+    });
+  };
+
   return (
     <>
       <div className="flex flex-col gap-3 sm:gap-4 mb-4">
-        <div className="flex flex-wrap items-center gap-2">{toolbarLeft}</div>
-        <div className="flex justify-end">
-          <Button
-            onClick={handleExport}
-            size="sm"
-            variant="outline"
-            title="Export to CSV"
-            disabled={processedInvoices.length === 0}
-          >
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline ml-2">Export</span>
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">{toolbarLeft}</div>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleExport}
+              size="sm"
+              variant="outline"
+              title="Export to CSV"
+              disabled={processedInvoices.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline ml-2">CSV</span>
+            </Button>
+            <Button
+              onClick={handleExportPDF}
+              size="sm"
+              variant="outline"
+              title="Export to PDF"
+              disabled={processedInvoices.length === 0}
+            >
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline ml-2">PDF</span>
+            </Button>
+          </div>
         </div>
       </div>
 

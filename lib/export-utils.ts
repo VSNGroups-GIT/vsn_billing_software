@@ -91,3 +91,75 @@ export function exportToJSON(
 export function getTimestamp(): string {
   return new Date().toISOString().split('T')[0]
 }
+
+/**
+ * Export data array to PDF using jsPDF
+ */
+export async function exportToPDF(
+  data: any[],
+  columns: ExportColumn[],
+  title: string,
+  filename: string = 'export.pdf'
+) {
+  if (data.length === 0) return
+
+  const { jsPDF } = await import('jspdf')
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const margin = 12
+  const usableWidth = pageWidth - margin * 2
+  const colWidth = usableWidth / columns.length
+  const rowHeight = 7
+
+  let y = 18
+
+  // Title
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.text(title, margin, y)
+  y += 8
+
+  // Header row background
+  doc.setFillColor(220, 220, 220)
+  doc.rect(margin, y - 5, usableWidth, rowHeight, 'F')
+
+  // Header row text
+  doc.setFontSize(8)
+  columns.forEach((col, i) => {
+    doc.text(col.label, margin + i * colWidth + 2, y)
+  })
+  y += rowHeight
+
+  // Data rows
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+
+  data.forEach((item, rowIndex) => {
+    if (y + rowHeight > pageHeight - margin) {
+      doc.addPage()
+      y = 18
+    }
+
+    if (rowIndex % 2 === 0) {
+      doc.setFillColor(248, 248, 248)
+      doc.rect(margin, y - 5, usableWidth, rowHeight, 'F')
+    }
+
+    columns.forEach((col, i) => {
+      let value = item[col.key]
+      if (col.formatter) value = col.formatter(value)
+      const str = String(value ?? '').substring(0, 38)
+      doc.text(str, margin + i * colWidth + 2, y)
+    })
+
+    y += rowHeight
+  })
+
+  // Bottom border line
+  doc.setDrawColor(180, 180, 180)
+  doc.line(margin, y, pageWidth - margin, y)
+
+  doc.save(filename)
+}

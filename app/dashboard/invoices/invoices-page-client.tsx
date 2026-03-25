@@ -44,18 +44,21 @@ export function InvoicesPageClient({
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedFY, setSelectedFY] = useState<string>(getFinancialYear());
 
-  // Filter by client and financial year
-  const filteredInvoices = invoices.filter((invoice) => {
-    // Client filter
-    if (selectedClientId && invoice.client_id !== selectedClientId) {
-      return false;
-    }
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-    // Financial year filter
+  // Filter by client, financial year, and custom date range
+  const filteredInvoices = invoices.filter((invoice) => {
+    if (selectedClientId && invoice.client_id !== selectedClientId) return false;
+
     const { start, end } = getFinancialYearDateRange(selectedFY);
     const issueDate = invoice.issue_date;
+    if (issueDate < start || issueDate > end) return false;
 
-    return issueDate >= start && issueDate <= end;
+    if (fromDate && issueDate < fromDate) return false;
+    if (toDate && issueDate > toDate) return false;
+
+    return true;
   });
 
   return (
@@ -63,22 +66,34 @@ export function InvoicesPageClient({
       <InvoicesTable
         invoices={filteredInvoices}
         userRole={userRole}
+        fromDate={fromDate}
+        toDate={toDate}
         toolbarLeft={
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">
-              Financial Year:
-            </span>
+            <span className="text-sm font-medium text-muted-foreground">FY:</span>
             <FinancialYearSelector
               selectedYear={selectedFY}
               onYearChange={setSelectedFY}
             />
-            <span className="text-sm font-medium text-muted-foreground">
-              Client:
-            </span>
+            <span className="text-sm font-medium text-muted-foreground">Client:</span>
             <ClientSelector
               clients={clients}
               selectedClientId={selectedClientId}
               onClientChange={setSelectedClientId}
+            />
+            <span className="text-sm font-medium text-muted-foreground">From:</span>
+            <input
+              type="date"
+              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+            />
+            <span className="text-sm font-medium text-muted-foreground">To:</span>
+            <input
+              type="date"
+              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
             />
           </div>
         }

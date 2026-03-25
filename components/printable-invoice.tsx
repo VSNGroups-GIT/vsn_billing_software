@@ -2,11 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Printer, CheckCircle } from "lucide-react";
-import { useEffect, useState, Fragment } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { Printer } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/hooks/use-toast";
 
 interface InvoiceTemplate {
   company_name: string;
@@ -64,9 +62,7 @@ interface PrintableInvoiceProps {
 
 export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
   const [isPrinting, setIsPrinting] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const router = useRouter();
-  const { toast } = useToast();
 
   const defaultTemplate: InvoiceTemplate = {
     company_name: "Your Company Name",
@@ -109,46 +105,8 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
     }, 100);
   };
 
-  const handleRecord = async () => {
-    setIsRecording(true);
-    try {
-      const supabase = createClient();
-
-      // Update invoice status to "recorded"
-      const { error } = await supabase
-        .from("invoices")
-        .update({ status: "recorded" })
-        .eq("id", invoice.id);
-
-      if (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to record invoice",
-        });
-        setIsRecording(false);
-        return;
-      }
-
-      toast({
-        variant: "success",
-        title: "Invoice Recorded",
-        description:
-          "Invoice status updated to recorded. Opening new invoice form...",
-      });
-
-      // Navigate to create new invoice after a short delay
-      setTimeout(() => {
-        router.push("/dashboard/invoices/new");
-      }, 1500);
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to record invoice",
-      });
-      setIsRecording(false);
-    }
+  const handleCreateNewInvoice = () => {
+    router.push("/dashboard/invoices/new");
   };
 
   // Removed PDF generation in favor of print/download flows
@@ -186,48 +144,38 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
 
   return (
     <>
-      <div className="no-print mb-4 flex items-center justify-between gap-2">
+      <div className="no-print mb-3 flex items-center justify-between gap-2">
         <Button asChild variant="outline">
           <a href="/dashboard/invoices">Back</a>
         </Button>
-        <div className="flex gap-2">
-          {invoice.status === "draft" && (
-            <Button onClick={handleRecord} disabled={isRecording}>
-              <CheckCircle className="h-4 w-4 mr-2" />
-              {isRecording ? "Recording..." : "Record"}
-            </Button>
-          )}
-          <Button onClick={handlePrint} disabled={isPrinting}>
-            <Printer className="h-4 w-4 mr-2" />
-            Print Invoice
-          </Button>
-        </div>
+        <Button onClick={handlePrint} disabled={isPrinting}>
+          <Printer className="h-4 w-4 mr-2" />
+          Print Invoice
+        </Button>
       </div>
 
       <Card className="print-area">
-        <CardContent className="p-8">
+        <CardContent className="p-5 md:p-6 text-sm">
           {/* Header */}
-          <div className="flex justify-between items-start mb-8">
+          <div className="flex justify-between items-start mb-5">
             <div>
               {logoSrc && (
                 <img
                   src={logoSrc}
                   alt="Company Logo"
-                  className="h-16 mb-4 object-contain"
+                  className="h-14 mb-3 object-contain"
                 />
               )}
-              <h1 className="text-2xl font-bold">
-                {activeTemplate.company_name}
-              </h1>
-              <div className="text-sm text-muted-foreground mt-2">
+              <h1 className="text-xl font-bold">{activeTemplate.company_name}</h1>
+              <div className="text-xs text-muted-foreground mt-1.5">
                 <p>{activeTemplate.company_address}</p>
                 <p>Phone: {activeTemplate.company_phone}</p>
                 <p>Email: {activeTemplate.company_email}</p>
               </div>
             </div>
             <div className="text-right">
-              <h2 className="text-3xl font-bold mb-2">INVOICE</h2>
-              <div className="text-sm">
+              <h2 className="text-2xl font-bold mb-1.5">INVOICE</h2>
+              <div className="text-xs">
                 <p className="font-semibold">
                   Invoice #: {invoice.invoice_number}
                 </p>
@@ -259,9 +207,9 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
           </div>
 
           {/* Bill To */}
-          <div className="mb-8">
-            <h3 className="font-semibold mb-2">Bill To:</h3>
-            <div className="text-sm">
+          <div className="mb-5">
+            <h3 className="font-semibold mb-1.5">Bill To:</h3>
+            <div className="text-xs">
               <p className="font-medium">{invoice.clients.name}</p>
               {invoice.clients.address && <p>{invoice.clients.address}</p>}
               {invoice.clients.city && invoice.clients.state && (
@@ -276,7 +224,7 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
           </div>
 
           {/* Items Table */}
-          <table className="w-full mb-8">
+          <table className="w-full mb-5">
             <thead className="border-b-2 border-gray-300">
               <tr>
                 <th className="text-left py-2">Description</th>
@@ -288,7 +236,7 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
             <tbody>
               {invoice.invoice_items.map((item, index) => (
                 <tr key={`item-${index}`} className="border-b border-gray-200">
-                  <td className="py-3">{item.description}</td>
+                  <td className="py-2">{item.description}</td>
                   <td className="text-right">
                     {Number(item.quantity).toFixed(2)}
                   </td>
@@ -314,7 +262,7 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
           </table>
 
           {/* Totals */}
-          <div className="flex justify-end mb-8">
+          <div className="flex justify-end mb-5">
             <div className="w-64">
               <div className="flex justify-between py-1">
                 <span>Subtotal:</span>
@@ -372,14 +320,14 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
 
           {/* Notes */}
           {invoice.notes && (
-            <div className="mb-6">
+            <div className="mb-4">
               <h4 className="font-semibold mb-1">Notes:</h4>
-              <p className="text-sm text-muted-foreground">{invoice.notes}</p>
+              <p className="text-xs text-muted-foreground">{invoice.notes}</p>
             </div>
           )}
 
           {/* Terms */}
-          <div className="border-t pt-4">
+          <div className="border-t pt-3">
             <h4 className="font-semibold mb-1">Terms & Conditions:</h4>
             <p className="text-xs text-muted-foreground">
               {activeTemplate.terms_and_conditions}
@@ -387,6 +335,10 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
           </div>
         </CardContent>
       </Card>
+
+      <div className="no-print mt-4 flex justify-end">
+        <Button onClick={handleCreateNewInvoice}>Create New Invoice</Button>
+      </div>
     </>
   );
 }

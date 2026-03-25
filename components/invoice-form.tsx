@@ -272,6 +272,15 @@ export function InvoiceForm({
           return `${ruleValue}x multiplier applied`;
         case "flat_addition":
           return `₹${ruleValue} addition applied`;
+        case "conditional_discount": {
+          const threshold = Number(pricingRule.conditional_threshold || 0);
+          const below = Number(pricingRule.conditional_discount_below || 0);
+          const aboveEqual = Number(
+            pricingRule.conditional_discount_above_equal || 0,
+          );
+
+          return `Conditional discount: <₹${threshold.toFixed(0)} -₹${below.toFixed(0)}, ≥₹${threshold.toFixed(0)} -₹${aboveEqual.toFixed(0)}`;
+        }
         case "category_based":
           return "Category-based pricing applied";
       }
@@ -839,7 +848,7 @@ export function InvoiceForm({
             issue_date: formData.issue_date,
             due_date: formData.due_date,
             due_days_type: selectedDueDaysType || "fixed_days",
-            status: "draft",
+            status: "recorded",
             subtotal: totals.subtotal,
             tax_amount: totals.tax_amount,
             discount_amount: totals.discount_amount,
