@@ -349,6 +349,20 @@ export function InvoiceForm({
             case "discount_flat":
               priced = Math.max(0, basePrice - ruleValue);
               break;
+            case "conditional_discount": {
+              const threshold = Number(pricingRule.conditional_threshold || 0);
+              const discountBelow = Number(
+                pricingRule.conditional_discount_below || 0,
+              );
+              const discountAboveEqual = Number(
+                pricingRule.conditional_discount_above_equal || 0,
+              );
+
+              const conditionalDiscount =
+                basePrice >= threshold ? discountAboveEqual : discountBelow;
+              priced = Math.max(0, basePrice - conditionalDiscount);
+              break;
+            }
             case "multiplier":
               priced = basePrice * ruleValue;
               break;
@@ -453,10 +467,22 @@ export function InvoiceForm({
             afterRule = basePrice + ruleValue;
             break;
           case "conditional_discount":
-            ruleLabel = "Conditional Discount";
-            ruleValueDisplay = "Based on amount";
-            afterRule = basePrice; // Base price without discount; discount will be applied based on line total
-            break;
+            {
+              const threshold = Number(pricingRule.conditional_threshold || 0);
+              const discountBelow = Number(
+                pricingRule.conditional_discount_below || 0,
+              );
+              const discountAboveEqual = Number(
+                pricingRule.conditional_discount_above_equal || 0,
+              );
+              const selectedDiscount =
+                basePrice >= threshold ? discountAboveEqual : discountBelow;
+
+              ruleLabel = "Conditional Discount";
+              ruleValueDisplay = `Base ₹${basePrice.toFixed(2)} ${basePrice >= threshold ? "≥" : "<"} ₹${threshold.toFixed(2)} → -₹${selectedDiscount.toFixed(2)}`;
+              afterRule = Math.max(0, basePrice - selectedDiscount);
+              break;
+            }
           default:
             ruleLabel = "Category base";
             ruleValueDisplay = null;
