@@ -43,6 +43,7 @@ interface Client {
   id: string;
   name: string;
   email: string;
+  tax_id?: string | null;
   phone: string | null;
   address: string | null;
   city: string | null;
@@ -50,7 +51,6 @@ interface Client {
   zip_code: string | null;
   country: string | null;
   created_at: string;
-  value_per_bird?: number | null;
   due_days?: number | null;
   due_days_type?: string | null;
   profiles?: {
@@ -80,6 +80,7 @@ export function ClientsTable({ clients }: ClientsTableProps) {
   const [filters, setFilters] = useState({
     name: "",
     email: "",
+    tax_id: "",
     city: "",
   });
 
@@ -114,6 +115,11 @@ export function ClientsTable({ clients }: ClientsTableProps) {
         return emailMatch || phoneMatch;
       });
     }
+    if (filters.tax_id) {
+      filtered = filtered.filter((c) =>
+        (c.tax_id || "").toLowerCase().includes(filters.tax_id.toLowerCase()),
+      );
+    }
     if (filters.city) {
       filtered = filtered.filter((c) =>
         (c.city || "").toLowerCase().includes(filters.city.toLowerCase()),
@@ -139,9 +145,9 @@ export function ClientsTable({ clients }: ClientsTableProps) {
             aVal = a.city || "";
             bVal = b.city || "";
             break;
-          case "value_per_bird":
-            aVal = a.value_per_bird || 0;
-            bVal = b.value_per_bird || 0;
+          case "tax_id":
+            aVal = a.tax_id || "";
+            bVal = b.tax_id || "";
             break;
           case "due_days":
             aVal = a.due_days || 0;
@@ -208,17 +214,13 @@ export function ClientsTable({ clients }: ClientsTableProps) {
     const columns: ExportColumn[] = [
       { key: "name", label: "Name" },
       { key: "email", label: "Email" },
+      { key: "tax_id", label: "GST / Tax ID" },
       { key: "phone", label: "Phone" },
       { key: "address", label: "Address" },
       { key: "city", label: "City" },
       { key: "state", label: "State" },
       { key: "zip_code", label: "Zip Code" },
       { key: "country", label: "Country" },
-      {
-        key: "value_per_bird",
-        label: "Value Per Bird",
-        formatter: (val) => (val != null ? Number(val).toFixed(2) : ""),
-      },
       { key: "due_days", label: "Due Days" },
       {
         key: "created_at",
@@ -282,18 +284,18 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                 <SortIcon column="email" />
               </TableHead>
               <TableHead
+                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("tax_id")}
+              >
+                GST / Tax ID
+                <SortIcon column="tax_id" />
+              </TableHead>
+              <TableHead
                 className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("city")}
               >
                 Location
                 <SortIcon column="city" />
-              </TableHead>
-              <TableHead
-                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
-                onClick={() => handleSort("value_per_bird")}
-              >
-                Value/Bird
-                <SortIcon column="value_per_bird" />
               </TableHead>
               <TableHead
                 className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
@@ -330,6 +332,14 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                   className="h-7 text-xs"
                 />
               </TableHead>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2">
+                <Input
+                  placeholder="Filter..."
+                  value={filters.tax_id}
+                  onChange={(e) => handleFilterChange("tax_id", e.target.value)}
+                  className="h-7 text-xs"
+                />
+              </TableHead>
               <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2">
                 <Input
                   placeholder="Filter..."
@@ -338,7 +348,6 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                   className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead className="hidden lg:table-cell"></TableHead>
               <TableHead className="hidden lg:table-cell"></TableHead>
               <TableHead className="hidden md:table-cell"></TableHead>
               <TableHead></TableHead>
@@ -364,6 +373,11 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                     )}
                   </div>
                 </TableCell>
+                <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
+                  {client.tax_id || (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
                 <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
                   {client.city && client.state ? (
                     <div className="text-xs sm:text-sm">
@@ -372,12 +386,6 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}
-                </TableCell>
-                <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
-                  {client.value_per_bird !== undefined &&
-                  client.value_per_bird !== null
-                    ? `₹${Number(client.value_per_bird).toFixed(2)}`
-                    : "-"}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
                   {client.due_days_type === "end_of_month" ? (

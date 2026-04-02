@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
@@ -18,15 +19,24 @@ interface Product {
   id: string
   name: string
   description: string | null
+  hsn_code?: string | null
+  is_active: boolean
+  operator_id?: string | null
+}
+
+interface Operator {
+  id: string
+  name: string
   is_active: boolean
 }
 
 interface ProductFormProps {
   product?: Product
+  operators: Operator[]
   userRole?: string
 }
 
-export function ProductForm({ product, userRole }: ProductFormProps) {
+export function ProductForm({ product, operators, userRole }: ProductFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
@@ -34,8 +44,14 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
   const [formData, setFormData] = useState({
     name: product?.name || "",
     description: product?.description || "",
+    hsn_code: product?.hsn_code || "",
     is_active: product?.is_active ?? true,
+    operator_id: product?.operator_id || "",
   })
+
+  const operatorOptions = operators
+    .filter((operator) => operator.is_active || operator.id === formData.operator_id)
+    .map((operator) => ({ value: operator.id, label: operator.name }))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,6 +74,16 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
     }
 
     try {
+      if (!formData.operator_id) {
+        toast({
+          variant: "destructive",
+          title: "Operator required",
+          description: "Please select an operator for this product.",
+        })
+        setIsLoading(false)
+        return
+      }
+
       // Get user's organization
       const { data: profile } = await supabase
         .from("profiles")
@@ -76,7 +102,9 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
           .update({
             name: formData.name,
             description: formData.description,
+            hsn_code: formData.hsn_code || null,
             is_active: formData.is_active,
+            operator_id: formData.operator_id,
           })
           .eq("id", product.id)
 
@@ -92,11 +120,13 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
         const { error } = await supabase.from("products").insert({
           name: formData.name,
           description: formData.description,
+          hsn_code: formData.hsn_code || null,
           is_active: formData.is_active,
           unit_price: 0,
           paper_price: 0,
           unit: "unit",
           tax_rate: 0,
+          operator_id: formData.operator_id,
           created_by: user.id,
           organization_id: profile.organization_id,
         })
@@ -157,6 +187,28 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Optional description"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="hsn_code">HSN Code</Label>
+            <Input
+              id="hsn_code"
+              value={formData.hsn_code}
+              onChange={(e) => setFormData({ ...formData, hsn_code: e.target.value })}
+              placeholder="Enter HSN code"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="operator_id">Operator</Label>
+            <SearchableSelect
+              id="operator_id"
+              value={formData.operator_id}
+              onValueChange={(value) => setFormData({ ...formData, operator_id: value })}
+              options={operatorOptions}
+              placeholder="Select operator"
+              searchPlaceholder="Type operator name..."
             />
           </div>
 

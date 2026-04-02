@@ -8,10 +8,9 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
-import { getPriceForCategoryOnDate } from "@/lib/utils";
 
 interface Client {
   id: string;
@@ -25,16 +24,11 @@ interface Product {
   paper_price: string;
 }
 
-interface PriceCategory {
-  id: string;
-  name: string;
-  currentPrice?: number | null;
-}
-
 interface PricingRule {
   id?: string;
   client_id: string;
   product_id: string;
+  operator_price?: number | null;
   price_rule_type: string;
   price_rule_value: string | null;
   price_category_id?: string | null;
@@ -47,6 +41,7 @@ interface PricingRule {
 
 interface ProductPricingRule {
   product_id: string;
+  operator_price: string;
   price_category_id: string;
   price_rule_type: string;
   price_rule_value: string;
@@ -63,6 +58,7 @@ interface ProductPricingRule {
 
 type NormalizedPricingRuleForCompare = {
   enabled: boolean;
+  operator_price: string;
   use_fixed_value: boolean;
   fixed_value: string;
   price_category_id: string;
@@ -79,12 +75,6 @@ interface ClientPricingFormProps {
   products: Product[];
   existingRule?: PricingRule;
   existingRules?: PricingRule[];
-  priceCategories?: PriceCategory[];
-  priceHistory?: Array<{
-    price_category_id: string;
-    price: number;
-    effective_date: string;
-  }>;
 }
 
 export function ClientPricingForm({
@@ -92,23 +82,11 @@ export function ClientPricingForm({
   products,
   existingRule,
   existingRules,
-  priceCategories = [],
-  priceHistory = [],
 }: ClientPricingFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [categories, setCategories] = useState<PriceCategory[]>([]);
-  const [history, setHistory] = useState<
-    Array<{
-      price_category_id: string;
-      price: number;
-      effective_date: string;
-    }>
-  >(priceHistory);
-  const today = new Date().toISOString().split("T")[0];
-
   const [selectedClient, setSelectedClient] = useState(
     existingRule?.client_id || existingRules?.[0]?.client_id || "",
   );
@@ -116,17 +94,23 @@ export function ClientPricingForm({
     Record<string, ProductPricingRule>
   >(() => {
     if (existingRule) {
-      const useFixedValue = !!existingRule.fixed_base_value;
       return {
         [existingRule.product_id]: {
           product_id: existingRule.product_id,
+          operator_price:
+            existingRule.operator_price?.toString() ||
+            products.find((p) => p.id === existingRule.product_id)?.paper_price ||
+            "",
           price_category_id: existingRule.price_category_id || "",
           price_rule_type: existingRule.price_rule_type,
           price_rule_value: existingRule.price_rule_value?.toString() || "",
           notes: existingRule.notes || "",
           enabled: true,
-          fixed_value: existingRule.fixed_base_value?.toString() || "",
-          use_fixed_value: useFixedValue,
+          fixed_value:
+            existingRule.fixed_base_value?.toString() ||
+            existingRule.price_rule_value?.toString() ||
+            "",
+          use_fixed_value: true,
           conditional_threshold:
             existingRule.conditional_threshold?.toString() || "",
           conditional_discount_below:
@@ -139,17 +123,23 @@ export function ClientPricingForm({
     if (existingRules && existingRules.length > 0) {
       const byProduct: Record<string, ProductPricingRule> = {};
       for (const rule of existingRules) {
-        const useFixedValue = !!rule.fixed_base_value;
         byProduct[rule.product_id] = {
           id: rule.id,
           product_id: rule.product_id,
+          operator_price:
+            rule.operator_price?.toString() ||
+            products.find((p) => p.id === rule.product_id)?.paper_price ||
+            "",
           price_category_id: rule.price_category_id || "",
           price_rule_type: rule.price_rule_type,
           price_rule_value: rule.price_rule_value?.toString() || "",
           notes: rule.notes || "",
           enabled: true,
-          fixed_value: rule.fixed_base_value?.toString() || "",
-          use_fixed_value: useFixedValue,
+          fixed_value:
+            rule.fixed_base_value?.toString() ||
+            rule.price_rule_value?.toString() ||
+            "",
+          use_fixed_value: true,
           conditional_threshold: rule.conditional_threshold?.toString() || "",
           conditional_discount_below:
             rule.conditional_discount_below?.toString() || "",
@@ -162,37 +152,6 @@ export function ClientPricingForm({
     return {};
   });
 
-  // Fetch price categories and history if not provided
-  useEffect(() => {
-    const load = async () => {
-      if (priceCategories.length > 0) {
-        setCategories(priceCategories);
-      }
-      if (priceHistory.length > 0) {
-        setHistory(priceHistory);
-      }
-
-      if (priceCategories.length === 0 || priceHistory.length === 0) {
-        const supabase = createClient();
-        const [catResult, historyResult] = await Promise.all([
-          supabase.from("price_categories").select("id, name").order("name"),
-          supabase
-            .from("price_category_history")
-            .select("price_category_id, price, effective_date"),
-        ]);
-
-        if (catResult.data) setCategories(catResult.data);
-        if (historyResult.data) setHistory(historyResult.data);
-      }
-    };
-
-    load();
-  }, [priceCategories, priceHistory]);
-
-  const categoriesWithPrice = categories.map((cat) => ({
-    ...cat,
-    currentPrice: getPriceForCategoryOnDate(cat.id, today, history),
-  }));
   const clientOptions = clients.map((client) => ({
     value: client.id,
     label: client.name,
@@ -219,6 +178,7 @@ export function ClientPricingForm({
     rule: ProductPricingRule,
   ): NormalizedPricingRuleForCompare => ({
     enabled: !!rule.enabled,
+    operator_price: normalizeNumericString(rule.operator_price || ""),
     use_fixed_value: !!rule.use_fixed_value,
     fixed_value: normalizeNumericString(rule.fixed_value || ""),
     price_category_id: rule.price_category_id || "",
@@ -242,6 +202,7 @@ export function ClientPricingForm({
     const addFromExistingRule = (r: PricingRule) => {
       map[r.product_id] = {
         enabled: true,
+        operator_price: normalizeNumericString(r.operator_price ?? ""),
         use_fixed_value:
           r.fixed_base_value !== null && r.fixed_base_value !== undefined,
         fixed_value: normalizeNumericString(r.fixed_base_value ?? ""),
@@ -280,6 +241,7 @@ export function ClientPricingForm({
     const current = normalizeCurrentRuleForCompare(rule);
     return (
       initial.enabled !== current.enabled ||
+      initial.operator_price !== current.operator_price ||
       initial.use_fixed_value !== current.use_fixed_value ||
       initial.fixed_value !== current.fixed_value ||
       initial.price_category_id !== current.price_category_id ||
@@ -309,16 +271,14 @@ export function ClientPricingForm({
     }
 
     for (const rule of enabledRules) {
-      if (!rule.price_category_id && !rule.use_fixed_value) {
-        setError(
-          "Please select a category or fixed value for all enabled products",
-        );
+      if (!rule.operator_price) {
+        setError("Please enter operator price for all enabled products");
         setIsLoading(false);
         return;
       }
-      if (rule.use_fixed_value && !rule.fixed_value) {
+      if (!rule.fixed_value) {
         setError(
-          "Please enter a fixed value for all enabled products using fixed value",
+          "Please enter a fixed base price for all enabled products",
         );
         setIsLoading(false);
         return;
@@ -375,6 +335,7 @@ export function ClientPricingForm({
         // Update existing rule (single product mode)
         const rule = productRules[existingRule.product_id];
         const updateData: any = {
+          operator_price: Number(rule.operator_price),
           price_rule_type: rule.price_rule_type,
           notes: rule.notes,
         };
@@ -395,13 +356,8 @@ export function ClientPricingForm({
           updateData.conditional_discount_above_equal = null;
         }
 
-        if (rule.use_fixed_value) {
-          updateData.fixed_base_value = Number(rule.fixed_value);
-          updateData.price_category_id = null;
-        } else {
-          updateData.price_category_id = rule.price_category_id;
-          updateData.fixed_base_value = null;
-        }
+        updateData.fixed_base_value = Number(rule.fixed_value);
+        updateData.price_category_id = null;
 
         const { error } = await supabase
           .from("client_product_pricing")
@@ -421,6 +377,7 @@ export function ClientPricingForm({
 
         const updatePromises = rulesToUpdate.map(async (rule) => {
           const updateData: any = {
+            operator_price: Number(rule.operator_price),
             price_rule_type: rule.price_rule_type,
             notes: rule.notes,
           };
@@ -443,13 +400,8 @@ export function ClientPricingForm({
             updateData.conditional_discount_above_equal = null;
           }
 
-          if (rule.use_fixed_value) {
-            updateData.fixed_base_value = Number(rule.fixed_value);
-            updateData.price_category_id = null;
-          } else {
-            updateData.price_category_id = rule.price_category_id;
-            updateData.fixed_base_value = null;
-          }
+          updateData.fixed_base_value = Number(rule.fixed_value);
+          updateData.price_category_id = null;
 
           const { error } = await supabase
             .from("client_product_pricing")
@@ -468,6 +420,7 @@ export function ClientPricingForm({
             const baseData = {
               client_id: selectedClient,
               product_id: rule.product_id,
+              operator_price: Number(rule.operator_price),
               price_rule_type: rule.price_rule_type,
               notes: rule.notes,
               organization_id: profile.organization_id,
@@ -492,13 +445,8 @@ export function ClientPricingForm({
               baseData.conditional_discount_above_equal = null;
             }
 
-            if (rule.use_fixed_value) {
-              baseData.fixed_base_value = Number(rule.fixed_value);
-              baseData.price_category_id = null;
-            } else {
-              baseData.price_category_id = rule.price_category_id;
-              baseData.fixed_base_value = null;
-            }
+            baseData.fixed_base_value = Number(rule.fixed_value);
+            baseData.price_category_id = null;
 
             return baseData;
           });
@@ -530,6 +478,7 @@ export function ClientPricingForm({
             const baseData = {
               client_id: selectedClient,
               product_id: rule.product_id,
+              operator_price: Number(rule.operator_price),
               price_rule_type: rule.price_rule_type,
               notes: rule.notes,
               organization_id: profile.organization_id,
@@ -554,13 +503,8 @@ export function ClientPricingForm({
               baseData.conditional_discount_above_equal = null;
             }
 
-            if (rule.use_fixed_value) {
-              baseData.fixed_base_value = Number(rule.fixed_value);
-              baseData.price_category_id = null;
-            } else {
-              baseData.price_category_id = rule.price_category_id;
-              baseData.fixed_base_value = null;
-            }
+            baseData.fixed_base_value = Number(rule.fixed_value);
+            baseData.price_category_id = null;
 
             return baseData;
           });
@@ -642,10 +586,12 @@ export function ClientPricingForm({
             products.map((product) => {
               const rule = productRules[product.id] || {
                 product_id: product.id,
+                operator_price: product.paper_price || "",
                 price_category_id: "",
                 price_rule_type: "discount_percentage",
                 price_rule_value: "",
                 notes: "",
+                use_fixed_value: true,
                 enabled: !!existingRule,
               };
 
@@ -709,71 +655,33 @@ export function ClientPricingForm({
                     <div className="space-y-4 pl-0 md:pl-8">
                       <div className="space-y-2">
                         <Label>
-                          Select Base Price Category{" "}
+                          Operator Price (₹) <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          type="number"
+                          step="0.0001"
+                          min="0"
+                          required={rule.enabled}
+                          value={rule.operator_price || ""}
+                          onChange={(e) =>
+                            updateProductRule({ operator_price: e.target.value })
+                          }
+                          placeholder="Enter operator price"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Used to compute client margin in pricing and reports.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>
+                          Base Price{" "}
                           <span className="text-red-500">*</span>
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          Click on a category to use its daily price as the base
-                          for this product
+                          Set a fixed base price for this product.
                         </p>
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
-                          {(() => {
-                            const isEggProduct = /egg/i.test(product.name);
-                            const filtered = categoriesWithPrice.filter(
-                              (category) => {
-                                const isEggCategory = /egg/i.test(
-                                  category.name,
-                                );
-                                return isEggProduct
-                                  ? isEggCategory
-                                  : !isEggCategory;
-                              },
-                            );
-                            return filtered.map((category) => (
-                              <button
-                                key={category.id}
-                                type="button"
-                                onClick={() =>
-                                  updateProductRule({
-                                    price_category_id: category.id,
-                                    use_fixed_value: false,
-                                  })
-                                }
-                                className={`rounded-lg border p-3 text-center transition-all hover:shadow-md ${
-                                  category.id === rule.price_category_id &&
-                                  !rule.use_fixed_value
-                                    ? "bg-blue-50 border-blue-400 ring-2 ring-blue-300 shadow-sm"
-                                    : "bg-white border-gray-200 hover:border-blue-200"
-                                }`}
-                              >
-                                <p
-                                  className={`text-base font-semibold ${
-                                    category.id === rule.price_category_id &&
-                                    !rule.use_fixed_value
-                                      ? "text-blue-900"
-                                      : "text-gray-700"
-                                  }`}
-                                >
-                                  {category.name}
-                                </p>
-                                <p
-                                  className={`text-xs mt-1 ${
-                                    category.id === rule.price_category_id &&
-                                    !rule.use_fixed_value
-                                      ? "text-blue-600 font-medium"
-                                      : "text-gray-500"
-                                  }`}
-                                >
-                                  {category.id === rule.price_category_id &&
-                                  !rule.use_fixed_value
-                                    ? "✓ Selected"
-                                    : "Click to select"}
-                                </p>
-                              </button>
-                            ));
-                          })()}
-
-                          {/* Fixed Value Button */}
                           <button
                             type="button"
                             onClick={() =>
@@ -829,8 +737,7 @@ export function ClientPricingForm({
                             className="bg-purple-50"
                           />
                           <p className="text-xs text-muted-foreground">
-                            This fixed value will be used as the base price
-                            instead of a daily category price
+                            This value will be used as the base price.
                           </p>
                         </div>
                       )}
@@ -854,13 +761,13 @@ export function ClientPricingForm({
                           />
                           <p className="text-xs text-muted-foreground">
                             {rule.price_rule_type === "discount_percentage" &&
-                              "Enter percentage off category price (e.g., 10 for 10% off)"}
+                              "Enter percentage off base price (e.g., 10 for 10% off)"}
                             {rule.price_rule_type === "discount_flat" &&
-                              "Enter flat amount off category price (e.g., 5 for ₹5 off)"}
+                              "Enter flat amount off base price (e.g., 5 for ₹5 off)"}
                             {rule.price_rule_type === "multiplier" &&
-                              "Enter multiplier on category price (e.g., 1.25 for 25% markup)"}
+                              "Enter multiplier on base price (e.g., 1.25 for 25% markup)"}
                             {rule.price_rule_type === "flat_addition" &&
-                              "Enter flat amount to add to category price (e.g., 10 for ₹10 addition)"}
+                              "Enter flat amount to add to base price (e.g., 10 for ₹10 addition)"}
                             {rule.price_rule_type === "conditional_discount" &&
                               "Configure discount amounts based on quantity thresholds"}
                           </p>
@@ -978,7 +885,7 @@ export function ClientPricingForm({
                         </div>
                       )}
 
-                      {(rule.price_category_id || rule.use_fixed_value) &&
+                      {rule.use_fixed_value &&
                         rule.price_rule_value &&
                         rule.price_rule_type &&
                         rule.price_rule_type !== "conditional_discount" &&
@@ -989,15 +896,10 @@ export function ClientPricingForm({
                           if (rule.use_fixed_value) {
                             categoryPrice = Number(rule.fixed_value || 0);
                             categoryName = "Fixed Value";
-                          } else {
-                            const selectedCategory = categoriesWithPrice.find(
-                              (c) => c.id === rule.price_category_id,
-                            );
-                            categoryPrice = selectedCategory?.currentPrice || 0;
-                            categoryName = selectedCategory?.name || "N/A";
                           }
 
                           const ruleValue = Number(rule.price_rule_value);
+                          const operatorPrice = Number(rule.operator_price || 0);
                           let finalPrice = categoryPrice;
 
                           switch (rule.price_rule_type) {
@@ -1019,6 +921,10 @@ export function ClientPricingForm({
                               break;
                           }
 
+                          const marginValue = finalPrice - operatorPrice;
+                          const marginPercent =
+                            finalPrice > 0 ? (marginValue / finalPrice) * 100 : 0;
+
                           return (
                             <div className="rounded-lg border bg-green-50 p-4">
                               <p className="text-sm font-medium text-green-900 mb-2">
@@ -1026,6 +932,9 @@ export function ClientPricingForm({
                               </p>
                               <p className="text-2xl font-bold text-green-700">
                                 ₹{finalPrice.toFixed(2)}
+                              </p>
+                              <p className="text-sm mt-1 text-green-800">
+                                Margin: ₹{marginValue.toFixed(2)} ({marginPercent.toFixed(2)}%)
                               </p>
                               <p className="text-xs text-green-600 mt-1">
                                 {categoryName} Base: ₹{categoryPrice.toFixed(2)}{" "}
@@ -1040,12 +949,6 @@ export function ClientPricingForm({
                                 {rule.price_rule_type === "flat_addition" &&
                                   `+ ₹${rule.price_rule_value}`}
                               </p>
-                              {!rule.use_fixed_value && (
-                                <p className="text-xs text-blue-600 mt-1">
-                                  Note: On invoices, the category price from the
-                                  invoice date will be used
-                                </p>
-                              )}
                             </div>
                           );
                         })()}

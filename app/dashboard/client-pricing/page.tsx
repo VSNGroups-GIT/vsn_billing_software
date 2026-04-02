@@ -36,16 +36,10 @@ export default async function ClientPricingPage() {
       `
       *,
       clients(name),
-      products(name, paper_price),
-      price_categories(name)
+      products(name, paper_price)
     `,
     )
     .order("created_at", { ascending: false })
-
-  // Get price history for calculations
-  const { data: priceHistory } = await supabase
-    .from("price_category_history")
-    .select("price_category_id, price, effective_date")
 
   return (
     <DashboardPageWrapper title="Client-Specific Pricing">
@@ -64,7 +58,6 @@ export default async function ClientPricingPage() {
         <Suspense fallback={<LoadingOverlay />}>
           <ClientPricingPageClient
             pricingRules={pricingRules || []}
-            priceHistory={priceHistory || []}
             clients={clients || []}
             userRole={profile.role}
           />

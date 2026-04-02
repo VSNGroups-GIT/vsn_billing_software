@@ -27,7 +27,6 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { getPriceForCategoryOnDate } from "@/lib/utils";
 
 interface Client {
   id: string;
@@ -35,8 +34,6 @@ interface Client {
   email: string;
   due_days?: number | null;
   due_days_type?: string | null;
-  enable_per_bird?: boolean | null;
-  value_per_bird?: number | null;
 }
 
 interface Product {
@@ -65,12 +62,6 @@ interface InvoiceFormProps {
   clients: Client[];
   products: Product[];
   clientPricingRules: ClientProductPricing[];
-  priceCategories?: Array<{ id: string; name: string }>;
-  priceHistory?: Array<{
-    price_category_id: string;
-    price: number;
-    effective_date: string;
-  }>;
   lastInvoiceNumber?: string | null;
   initialInvoice?: {
     id: string;
@@ -86,6 +77,8 @@ interface InvoiceFormProps {
     discount_amount?: number | null;
     total_amount?: number | null;
     total_birds?: number | null;
+    gst_percent?: number | null;
+    split_gst?: boolean | null;
   };
   initialItems?: Array<{
     product_id: string | null;
@@ -134,8 +127,6 @@ export function InvoiceForm({
   clients,
   products,
   clientPricingRules,
-  priceCategories = [],
-  priceHistory = [],
   lastInvoiceNumber,
   initialInvoice,
   initialItems,
@@ -193,7 +184,12 @@ export function InvoiceForm({
       discount_percent: Number.isFinite(discount_percent)
         ? discount_percent
         : 0,
-      tax_percent: Number.isFinite(tax_percent) ? tax_percent : 0,
+      tax_percent:
+        initialInvoice.gst_percent != null
+          ? Number(initialInvoice.gst_percent)
+          : Number.isFinite(tax_percent)
+            ? tax_percent
+            : 0,
     };
   };
 
@@ -201,6 +197,10 @@ export function InvoiceForm({
     discount_percent: number | null;
     tax_percent: number | null;
   }>(deriveInvoiceRatesFromInitial);
+
+  const [splitGst, setSplitGst] = useState<boolean>(
+    initialInvoice?.split_gst ?? false,
+  );
 
   const today = new Date().toISOString().split("T")[0];
   const defaultDue = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -299,10 +299,6 @@ export function InvoiceForm({
     previousItemsCountForFocusRef.current = items.length;
   }, [items]);
 
-  const getClientAdjustment = (clientId: string) => {
-    const client = clients.find((c) => c.id === clientId);
-    return client?.value_per_bird ? Number(client.value_per_bird) : 0;
-  };
   // Function to check if a pricing rule is applied for a product
   const getPricingRuleInfo = (productId: string, clientId: string) => {
     if (!clientId || !productId) return null;
@@ -354,9 +350,6 @@ export function InvoiceForm({
   const calculateClientPrice = (
     productId: string,
     clientId: string,
-    issueDate?: string,
-    applyPerBird: boolean = false,
-    birdCount: number = 1,
   ): number => {
     const product = products.find((p) => p.id === productId);
     if (!product) return 0;
@@ -368,23 +361,10 @@ export function InvoiceForm({
       );
 
       if (pricingRule) {
-        let basePrice = 0;
+        let basePrice = Number(product.paper_price || product.unit_price);
 
-        // Check if using fixed value
         if (pricingRule.fixed_base_value) {
           basePrice = Number(pricingRule.fixed_base_value);
-        } else if (pricingRule.price_category_id) {
-          // Get category price as base
-          const effectiveDate = issueDate || formData.issue_date;
-          const categoryPrice = getPriceForCategoryOnDate(
-            pricingRule.price_category_id,
-            effectiveDate,
-            priceHistory,
-          );
-          basePrice =
-            categoryPrice !== null
-              ? categoryPrice
-              : Number(product.paper_price);
         }
 
         if (basePrice > 0) {
@@ -423,18 +403,7 @@ export function InvoiceForm({
               priced = basePrice;
           }
 
-          // Eggs category pricing is entered per 100; for egg products, unit price is per egg
-          const selectedCategory = priceCategories.find(
-            (c) => c.id === pricingRule.price_category_id,
-          );
-          const isEggCategory = selectedCategory
-            ? /egg/i.test(selectedCategory.name)
-            : false;
-          const isEggProduct = /egg/i.test(product.name);
-          const adjusted =
-            isEggCategory && isEggProduct ? priced / 100 : priced;
-
-          return Math.max(0, adjusted);
+          return Math.max(0, priced);
         }
       }
     }
@@ -447,18 +416,11 @@ export function InvoiceForm({
   const getPriceBreakdown = (
     productId: string,
     clientId: string,
-    issueDate?: string,
-    applyPerBird: boolean = false,
-    birdCount: number = 1,
   ) => {
     const product = products.find((p) => p.id === productId);
     if (!product) return null;
 
-    const clientAdjustment = getClientAdjustment(clientId);
-    const perBirdValue = clientAdjustment;
-    const safeBirds = Math.max(1, birdCount);
-
-    let basePrice = Number(product.unit_price);
+    let basePrice = Number(product.paper_price || product.unit_price);
     let afterRule = basePrice;
     let ruleLabel: string | null = null;
     let ruleValueDisplay: string | null = null;
@@ -478,19 +440,6 @@ export function InvoiceForm({
         categoryPrice = Number(pricingRule.fixed_base_value);
         categoryName = "Fixed Value";
         basePrice = categoryPrice;
-      } else if (pricingRule.price_category_id) {
-        const effectiveDate = issueDate || formData.issue_date;
-        categoryPrice = getPriceForCategoryOnDate(
-          pricingRule.price_category_id,
-          effectiveDate,
-          priceHistory,
-        );
-        basePrice =
-          categoryPrice !== null ? categoryPrice : Number(product.paper_price);
-        const selectedCategory = priceCategories.find(
-          (c) => c.id === pricingRule.price_category_id,
-        );
-        categoryName = selectedCategory?.name || "N/A";
       }
 
       if (basePrice > 0) {
@@ -539,23 +488,8 @@ export function InvoiceForm({
             afterRule = basePrice;
         }
 
-        // For Eggs category, price is per 100; show unit price after dividing by 100 for egg products
-        const selectedCategory = priceCategories.find(
-          (c) => c.id === pricingRule.price_category_id,
-        );
-        const isEggCategory = selectedCategory
-          ? /egg/i.test(selectedCategory.name)
-          : false;
-        const isEggProduct = /egg/i.test(product.name);
-        if (isEggCategory && isEggProduct) {
-          // Keep basePrice as category price (per 100) but unit price should reflect per-egg
-          afterRule = afterRule / 100;
-        }
       }
     }
-
-    // Per-bird adjustment is now applied to line total, not unit price
-    const birdAdj = applyPerBird ? perBirdValue * safeBirds : 0;
     const finalPrice = afterRule;
 
     return {
@@ -563,9 +497,6 @@ export function InvoiceForm({
       ruleLabel,
       ruleValueDisplay,
       afterRule,
-      perBirdValue,
-      birdCount: applyPerBird ? safeBirds : 0,
-      birdAdj,
       finalPrice,
     };
   };
@@ -602,8 +533,6 @@ export function InvoiceForm({
   };
 
   // Recalculate all item prices when client changes; leave selection untouched
-  const [clientPerBirdEnabled, setClientPerBirdEnabled] = useState(false);
-  const [clientPerBirdValue, setClientPerBirdValue] = useState(0);
 
   const handleClientChange = (clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
@@ -614,21 +543,10 @@ export function InvoiceForm({
     setSelectedDueDaysType(daysType);
     setFormData({ ...formData, client_id: clientId, due_date: newDue });
 
-    // track per-bird settings from client
-    setClientPerBirdEnabled(!!client?.enable_per_bird);
-    setClientPerBirdValue(Number(client?.value_per_bird || 0));
-
     setItems((prev) =>
       prev.map((item) => {
         if (!item.product_id) return item;
-        // per-item per-bird no longer used; always false
-        const recalculated = calculateClientPrice(
-          item.product_id,
-          clientId,
-          formData.issue_date,
-          false,
-          1,
-        );
+        const recalculated = calculateClientPrice(item.product_id, clientId);
         const updated = {
           ...item,
           unit_price: recalculated,
@@ -646,21 +564,7 @@ export function InvoiceForm({
     tax_amount: 0,
     discount_amount: 0,
     total_amount: 0,
-    per_bird_amount: 0,
-    total_birds: 0,
   });
-
-  // Manual total birds input (user-provided, not derived from item quantities)
-  const [globalBirdCount, setGlobalBirdCount] = useState<number>(
-    initialInvoice?.total_birds || 0,
-  );
-
-  // sync bird count if editing an existing invoice
-  useEffect(() => {
-    if (initialInvoice && initialInvoice.total_birds != null) {
-      setGlobalBirdCount(initialInvoice.total_birds);
-    }
-  }, [initialInvoice]);
 
   // Calculate line total for each item
   // Order: Subtotal → Apply Discount → Calculate Tax on Discounted Amount → Add Tax
@@ -679,8 +583,7 @@ export function InvoiceForm({
     return Math.max(0, afterTax);
   };
 
-  // Recalculate totals whenever items or invoice-level rates or client per-bird change
-  // Order: Sum line totals (base) → apply invoice tax/discount → add per-bird adjustment
+  // Recalculate totals whenever items or invoice-level rates change
   useEffect(() => {
     // Subtotal of line items (base, before per-bird)
     const baseSubtotal = items.reduce((sum, item) => sum + item.line_total, 0);
@@ -708,20 +611,11 @@ export function InvoiceForm({
       return sum + (itemSubtotal * Number(item.discount || 0)) / 100;
     }, 0);
 
-    // total number of birds: use manual user input rather than quantity sum
-    const totalBirds = Number(globalBirdCount || 0);
-
-    const perBirdAmount =
-      clientPerBirdEnabled && clientPerBirdValue !== 0
-        ? clientPerBirdValue * totalBirds
-        : 0;
-
-    // Total amount including per-bird adjustment at the end
+    // Total amount based on line totals and invoice-level adjustments
     const total_amount =
       baseSubtotal +
       invoice_tax_amount -
-      invoice_discount_amount +
-      perBirdAmount;
+      invoice_discount_amount;
     const tax_amount = line_tax_amount + invoice_tax_amount;
     const discount_amount = line_discount_amount + invoice_discount_amount;
 
@@ -730,16 +624,8 @@ export function InvoiceForm({
       tax_amount,
       discount_amount,
       total_amount,
-      per_bird_amount: perBirdAmount,
-      total_birds: totalBirds,
     });
-  }, [
-    items,
-    invoiceRates,
-    clientPerBirdEnabled,
-    clientPerBirdValue,
-    globalBirdCount,
-  ]);
+  }, [items, invoiceRates]);
 
   // No global per-bird toggle; per-item controls handle repricing
 
@@ -779,16 +665,7 @@ export function InvoiceForm({
         if (!product) return prev;
 
         const existing = existingIndex >= 0 ? prev[existingIndex] : undefined;
-        // Enable per-bird by default for Live category Whole bird products
-        const applyPerBird = false; // global per-bird will be handled separately
-        // For unit price, do not depend on bird count; leave bird_count blank until user enters
-        const unitPrice = calculateClientPrice(
-          productId,
-          formData.client_id,
-          formData.issue_date,
-          false,
-          1,
-        );
+        const unitPrice = calculateClientPrice(productId, formData.client_id);
 
         const baseItem: InvoiceItem = {
           product_id: productId,
@@ -900,15 +777,6 @@ export function InvoiceForm({
     }
 
     try {
-      // Validate per-bird requirement: if per-bird is enabled, bird count must be provided
-      if (clientPerBirdEnabled && globalBirdCount <= 0) {
-        setError(
-          "Total birds is required when per-bird pricing is enabled. Please enter a bird count greater than 0."
-        );
-        setIsLoading(false);
-        return;
-      }
-
       // Get user's organization
       const { data: profile } = await supabase
         .from("profiles")
@@ -976,8 +844,10 @@ export function InvoiceForm({
             discount_amount: totals.discount_amount,
             total_amount: totals.total_amount,
             amount_paid: 0,
-            total_birds: globalBirdCount,
+            total_birds: 0,
             notes: formData.notes,
+            gst_percent: Number(invoiceRates.tax_percent || 0),
+            split_gst: splitGst,
             created_by: user.id,
             organization_id: profile.organization_id,
           })
@@ -999,8 +869,10 @@ export function InvoiceForm({
             tax_amount: totals.tax_amount,
             discount_amount: totals.discount_amount,
             total_amount: totals.total_amount,
-            total_birds: globalBirdCount,
+            total_birds: 0,
             notes: formData.notes,
+            gst_percent: Number(invoiceRates.tax_percent || 0),
+            split_gst: splitGst,
           })
           .eq("id", invoiceId);
 
@@ -1141,21 +1013,6 @@ export function InvoiceForm({
                   </Command>
                 </PopoverContent>
               </Popover>
-              {selectedClient && (
-                <div className="mt-1">
-                  {selectedClient.enable_per_bird ? (
-                    <p className="text-sm text-amber-600">
-                      Per‑bird enabled: ₹
-                      {Number(selectedClient.value_per_bird || 0).toFixed(2)} /
-                      bird
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Per‑bird disabled for this client
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -1289,25 +1146,13 @@ export function InvoiceForm({
               const previewPrice = calculateClientPrice(
                 product.id,
                 formData.client_id,
-                formData.issue_date,
-                false,
-                1,
               );
               const ruleInfo = formData.client_id
                 ? getPricingRuleInfo(product.id, formData.client_id)
                 : null;
               const showMissingRuleWarning = formData.client_id && !ruleInfo;
-              const clientAdj = formData.client_id
-                ? getClientAdjustment(formData.client_id)
-                : 0;
               const breakdown = formData.client_id
-                ? getPriceBreakdown(
-                    product.id,
-                    formData.client_id,
-                    formData.issue_date,
-                    false,
-                    1,
-                  )
+                ? getPriceBreakdown(product.id, formData.client_id)
                 : null;
 
               return (
@@ -1511,45 +1356,47 @@ export function InvoiceForm({
             </div>
           )}
 
-          {/*
-          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-sm">Invoice Discount (%)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={invoiceRates.discount_percent ?? ""}
-                onChange={(e) =>
-                  setInvoiceRates((r) => ({
-                    ...r,
-                    discount_percent:
-                      e.target.value === "" ? null : Number(e.target.value),
-                  }))
-                }
-                className="text-sm"
-              />
+          {/* GST Configuration */}
+          <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
+            <p className="text-sm font-semibold text-slate-700">GST Configuration</p>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+              <div className="space-y-2 flex-1">
+                <Label htmlFor="gst-percent" className="text-sm">GST (%)</Label>
+                <Input
+                  id="gst-percent"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="e.g., 18"
+                  value={invoiceRates.tax_percent ?? ""}
+                  onChange={(e) =>
+                    setInvoiceRates((r) => ({
+                      ...r,
+                      tax_percent:
+                        e.target.value === "" ? null : Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-3 pb-2">
+                <Switch
+                  id="split-gst"
+                  checked={splitGst}
+                  onCheckedChange={setSplitGst}
+                />
+                <Label htmlFor="split-gst" className="text-sm cursor-pointer">
+                  Split as CGST + SGST
+                </Label>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-sm">Invoice Tax (%)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={invoiceRates.tax_percent ?? ""}
-                onChange={(e) =>
-                  setInvoiceRates((r) => ({
-                    ...r,
-                    tax_percent:
-                      e.target.value === "" ? null : Number(e.target.value),
-                  }))
-                }
-              />
-            </div>
+            {splitGst && (invoiceRates.tax_percent || 0) > 0 && (
+              <p className="text-xs text-slate-500">
+                CGST {((invoiceRates.tax_percent || 0) / 2).toFixed(2)}% +
+                SGST {((invoiceRates.tax_percent || 0) / 2).toFixed(2)}%
+              </p>
+            )}
           </div>
-          */}
 
           <div className="border-t pt-4 space-y-2">
             <div className="flex justify-between text-sm">
@@ -1557,52 +1404,36 @@ export function InvoiceForm({
               <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
             </div>
 
-            {/* <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Tax:</span>
-              <span className="font-medium">₹{totals.tax_amount.toFixed(2)}</span>
-            </div> */}
+            {Number(totals.tax_amount) > 0 && (
+              splitGst ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      CGST ({((invoiceRates.tax_percent || 0) / 2).toFixed(2)}%):
+                    </span>
+                    <span className="font-medium">₹{(totals.tax_amount / 2).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      SGST ({((invoiceRates.tax_percent || 0) / 2).toFixed(2)}%):
+                    </span>
+                    <span className="font-medium">₹{(totals.tax_amount / 2).toFixed(2)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    GST{(invoiceRates.tax_percent || 0) > 0 ? ` (${invoiceRates.tax_percent}%)` : ""}:
+                  </span>
+                  <span className="font-medium">₹{totals.tax_amount.toFixed(2)}</span>
+                </div>
+              )
+            )}
 
             {Number(totals.discount_amount) > 0 && (
               <div className="flex justify-between text-sm text-green-600">
                 <span>Discount:</span>
                 <span>-₹{totals.discount_amount.toFixed(2)}</span>
-              </div>
-            )}
-
-            {clientPerBirdEnabled && (
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <Label className="text-sm">
-                    Total birds <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    required
-                    value={globalBirdCount || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "") {
-                        setGlobalBirdCount(0);
-                      } else {
-                        setGlobalBirdCount(Math.max(0, Number(val)));
-                      }
-                    }}
-                    placeholder="Enter number of birds"
-                    className={`w-36 ${globalBirdCount <= 0 ? "border-red-300" : ""}`}
-                  />
-                </div>
-              </div>
-            )}
-
-            {clientPerBirdEnabled && totals.total_birds > 0 && (
-              <div className="flex justify-between text-sm text-amber-600">
-                <span>
-                  Per-bird adjustment ({totals.total_birds} birds × ₹
-                  {clientPerBirdValue.toFixed(2)}/bird)
-                </span>
-                <span>₹{totals.per_bird_amount.toFixed(2)}</span>
               </div>
             )}
 
@@ -1645,8 +1476,7 @@ export function InvoiceForm({
           disabled={
             isLoading ||
             !formData.client_id ||
-            !formData.invoice_number ||
-            (clientPerBirdEnabled && globalBirdCount <= 0)
+            !formData.invoice_number
           }
         >
           {isLoading ? "Creating..." : "Create Invoice"}

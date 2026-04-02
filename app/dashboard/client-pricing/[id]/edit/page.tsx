@@ -40,11 +40,9 @@ export default async function EditClientPricingPage({ params }: { params: Promis
   }
 
   // Get clients, products, and pricing data for the form
-  const [clientsResult, productsResult, categoriesResult, historyResult] = await Promise.all([
+  const [clientsResult, productsResult] = await Promise.all([
     supabase.from("clients").select("id, name").order("name"),
     supabase.from("products").select("id, name, paper_price").eq("is_active", true).order("name"),
-    supabase.from("price_categories").select("id, name").order("name"),
-    supabase.from("price_category_history").select("price_category_id, price, effective_date"),
   ])
 
   return (
@@ -59,8 +57,6 @@ export default async function EditClientPricingPage({ params }: { params: Promis
           clients={clientsResult.data || []}
           products={productsResult.data || []}
           existingRules={clientPricingRules || []}
-          priceCategories={categoriesResult.data || []}
-          priceHistory={historyResult.data || []}
         />
       </div>
     </div>

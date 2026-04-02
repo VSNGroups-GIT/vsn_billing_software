@@ -26,19 +26,11 @@ export default async function EditInvoicePage({
     notFound();
   }
 
-  // Load clients, products, pricing rules, categories, history
-  const [
-    clientsResult,
-    productsResult,
-    pricingRulesResult,
-    categoriesResult,
-    historyResult,
-  ] = await Promise.all([
+  // Load clients, products and pricing rules
+  const [clientsResult, productsResult, pricingRulesResult] = await Promise.all([
     supabase
       .from("clients")
-      .select(
-        "id, name, email, due_days, due_days_type, enable_per_bird, value_per_bird",
-      )
+      .select("id, name, email, due_days, due_days_type")
       .order("name"),
     supabase.from("products").select("*").eq("is_active", true).order("name"),
     supabase
@@ -46,10 +38,6 @@ export default async function EditInvoicePage({
       .select(
         "product_id, price_rule_type, price_rule_value, price_category_id, fixed_base_value, client_id, conditional_threshold, conditional_discount_below, conditional_discount_above_equal",
       ),
-    supabase.from("price_categories").select("id, name").order("name"),
-    supabase
-      .from("price_category_history")
-      .select("price_category_id, price, effective_date"),
   ]);
 
   return (
@@ -65,8 +53,6 @@ export default async function EditInvoicePage({
         clients={clientsResult.data || []}
         products={productsResult.data || []}
         clientPricingRules={pricingRulesResult.data || []}
-        priceCategories={categoriesResult.data || []}
-        priceHistory={historyResult.data || []}
         initialInvoice={{
           id: invoice.id,
           client_id: invoice.client_id,
@@ -81,6 +67,8 @@ export default async function EditInvoicePage({
           discount_amount: Number(invoice.discount_amount),
           total_amount: Number(invoice.total_amount),
           total_birds: Number(invoice.total_birds || 0),
+          gst_percent: invoice.gst_percent != null ? Number(invoice.gst_percent) : null,
+          split_gst: invoice.split_gst ?? false,
         }}
         initialItems={(invoice.invoice_items || []).map((it: any) => ({
           product_id: it.product_id,

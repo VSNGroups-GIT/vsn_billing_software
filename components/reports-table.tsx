@@ -20,7 +20,9 @@ type ClientRow = {
   sale: number
   todaySaleQty: number
   todaySaleValue: number
-  saleKgs: number
+  operatorCost: number
+  marginValue: number
+  marginPercent: number
   payments: number
   outstanding: number
   oldBal: number
@@ -101,17 +103,21 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
             aVal = a.todaySaleValue
             bVal = b.todaySaleValue
             break
-          case "saleKgs":
-            aVal = a.saleKgs
-            bVal = b.saleKgs
-            break
-          case "avgQty":
-            aVal = a.saleKgs / daysInMonth
-            bVal = b.saleKgs / daysInMonth
-            break
           case "payments":
             aVal = a.payments
             bVal = b.payments
+            break
+          case "operatorCost":
+            aVal = a.operatorCost
+            bVal = b.operatorCost
+            break
+          case "marginValue":
+            aVal = a.marginValue
+            bVal = b.marginValue
+            break
+          case "marginPercent":
+            aVal = a.marginPercent
+            bVal = b.marginPercent
             break
           case "outstanding":
             aVal = a.outstanding
@@ -140,7 +146,8 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           sale: acc.sale + r.sale,
           todaySaleQty: acc.todaySaleQty + r.todaySaleQty,
           todaySaleValue: acc.todaySaleValue + r.todaySaleValue,
-          saleKgs: acc.saleKgs + r.saleKgs,
+          operatorCost: acc.operatorCost + r.operatorCost,
+          marginValue: acc.marginValue + r.marginValue,
           payments: acc.payments + r.payments,
           outstanding: acc.outstanding + r.outstanding,
         }),
@@ -149,7 +156,8 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           sale: 0,
           todaySaleQty: 0,
           todaySaleValue: 0,
-          saleKgs: 0,
+          operatorCost: 0,
+          marginValue: 0,
           payments: 0,
           outstanding: 0,
         },
@@ -163,7 +171,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-white overflow-x-auto">
-        <Table className="text-xs sm:text-sm min-w-[1180px]">
+        <Table className="text-xs sm:text-sm min-w-[1200px]">
           <TableHeader>
             {/* Column headers — sortable */}
             <TableRow>
@@ -199,21 +207,27 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
-                onClick={() => handleSort("saleKgs")}
-              >
-                Sale in KGs <SortIcon column="saleKgs" />
-              </TableHead>
-              <TableHead
-                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
-                onClick={() => handleSort("avgQty")}
-              >
-                Average quantity <SortIcon column="avgQty" />
-              </TableHead>
-              <TableHead
-                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("payments")}
               >
                 Payments <SortIcon column="payments" />
+              </TableHead>
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("operatorCost")}
+              >
+                Operator Cost <SortIcon column="operatorCost" />
+              </TableHead>
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("marginValue")}
+              >
+                Margin ₹ <SortIcon column="marginValue" />
+              </TableHead>
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("marginPercent")}
+              >
+                Margin % <SortIcon column="marginPercent" />
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
@@ -246,15 +260,16 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 Current day sale value
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
-                Total purchased quantity 
-              </TableHead>
-              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground leading-tight text-xs">
-                Average quantity per day
-                <br />
-                Total / {daysInMonth} days
+                Current month payments
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
-                Current month payments
+                Estimated monthly cost
+              </TableHead>
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
+                Sale - cost
+              </TableHead>
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
+                (Margin ₹ / Sale) × 100
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
                 Total outstanding
@@ -266,7 +281,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
             {pagination.paginatedItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={10}
                   className="text-center text-muted-foreground py-16 px-2 sm:px-4"
                 >
                   {filters.hotel
@@ -292,21 +307,17 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                     {row.todaySaleValue > 0 ? `₹${fmt(row.todaySaleValue)}` : "—"}
                   </TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                    {row.saleKgs > 0 ? row.saleKgs.toFixed(2) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                    {row.saleKgs > 0 ? (
-                      <>
-                        {(row.saleKgs / daysInMonth).toFixed(2)}
-                        {/* <span className="text-muted-foreground ml-1">/ {daysInMonth}d</span> */}
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-green-700">
                     {row.payments > 0 ? `₹${fmt(row.payments)}` : "—"}
+                  </TableCell>
+                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-slate-700">
+                    {row.operatorCost > 0 ? `₹${fmt(row.operatorCost)}` : "—"}
+                  </TableCell>
+                  <TableCell className={`text-right px-2 sm:px-4 py-2 sm:py-3 font-semibold ${row.marginValue < 0 ? "text-red-700" : "text-blue-700"}`}>
+                    {row.marginValue !== 0 ? `₹${fmt(row.marginValue)}` : "—"}
+                  </TableCell>
+                  <TableCell className={`text-right px-2 sm:px-4 py-2 sm:py-3 font-semibold ${row.marginPercent < 0 ? "text-red-700" : "text-blue-700"}`}>
+                    {row.sale > 0 ? `${row.marginPercent.toFixed(2)}%` : "—"}
                   </TableCell>
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-semibold text-orange-700">
                     {row.outstanding > 0 ? `₹${fmt(row.outstanding)}` : "—"}
@@ -333,14 +344,17 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                   ₹{fmt(totals.todaySaleValue)}
                 </TableCell>
-                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                  {totals.saleKgs > 0 ? totals.saleKgs.toFixed(2) : "0"}
-                </TableCell>
-                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-normal text-muted-foreground">
-                  —
-                </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-green-700">
                   ₹{fmt(totals.payments)}
+                </TableCell>
+                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-slate-700">
+                  ₹{fmt(totals.operatorCost)}
+                </TableCell>
+                <TableCell className={`text-right px-2 sm:px-4 py-2 sm:py-3 ${totals.marginValue < 0 ? "text-red-700" : "text-blue-700"}`}>
+                  ₹{fmt(totals.marginValue)}
+                </TableCell>
+                <TableCell className={`text-right px-2 sm:px-4 py-2 sm:py-3 ${totals.sale > 0 && totals.marginValue / totals.sale < 0 ? "text-red-700" : "text-blue-700"}`}>
+                  {totals.sale > 0 ? `${((totals.marginValue / totals.sale) * 100).toFixed(2)}%` : "—"}
                 </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-orange-700">
                   ₹{fmt(totals.outstanding)}

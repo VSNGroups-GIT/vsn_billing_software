@@ -8,7 +8,7 @@ interface PricingRule {
   id: string
   client_id: string
   product_id: string
-  price_category_id: string | null
+  operator_price: number | null
   price_rule_type: string
   price_rule_value: string | null
   fixed_base_value: number | null
@@ -19,7 +19,6 @@ interface PricingRule {
   conditional_discount_above_equal?: number | null
   clients: { name: string }
   products: { name: string; paper_price: string }
-  price_categories?: { name: string } | null
 }
 
 interface Client {
@@ -29,12 +28,11 @@ interface Client {
 
 interface ClientPricingPageClientProps {
   pricingRules: PricingRule[]
-  priceHistory: any[]
   clients: Client[]
   userRole?: string
 }
 
-export function ClientPricingPageClient({ pricingRules, priceHistory, clients, userRole }: ClientPricingPageClientProps) {
+export function ClientPricingPageClient({ pricingRules, clients, userRole }: ClientPricingPageClientProps) {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
 
   const filteredRules =
@@ -44,7 +42,6 @@ export function ClientPricingPageClient({ pricingRules, priceHistory, clients, u
     <div className="space-y-4">
       <ClientPricingTable
         pricingRules={filteredRules}
-        priceHistory={priceHistory}
         userRole={userRole}
         toolbarLeft={(
           <ClientSelector clients={clients} selectedClientId={selectedClientId} onClientChange={setSelectedClientId} />

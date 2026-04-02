@@ -49,18 +49,18 @@ export default async function SettingsPage() {
     <DashboardPageWrapper title="System Settings">
       <div className="w-full p-4 sm:p-6 lg:p-8 space-y-6">
         {isManagerViewOnly && (
-          <div className="px-6 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-sm text-amber-700">View-only access. Contact an admin to make changes.</p>
           </div>
         )}
 
-        <div className="grid gap-6 px-6">
+        <div className="grid gap-6">
           <Card className={isManagerViewOnly ? "pointer-events-none opacity-60" : ""}>
             <CardHeader>
               <CardTitle>Organization Settings</CardTitle>
               <CardDescription>Configure your organization details and preferences</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <SettingsForm organization={organization} />
             </CardContent>
           </Card>
@@ -70,7 +70,7 @@ export default async function SettingsPage() {
               <CardTitle>Tax Configuration</CardTitle>
               <CardDescription>Set default tax rates and rules</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <p className="text-sm text-slate-500">
                 Default tax rates are configured per product. You can set organization-wide defaults here in future
                 updates.
@@ -83,7 +83,7 @@ export default async function SettingsPage() {
               <CardTitle>Invoice Template</CardTitle>
               <CardDescription>Customize invoice appearance and branding</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               {await InvoiceTemplateSection({ organizationId: profile.organization_id })}
             </CardContent>
           </Card>

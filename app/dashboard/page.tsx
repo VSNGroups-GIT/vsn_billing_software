@@ -57,7 +57,7 @@ export default async function DashboardPage() {
     .eq("id", user.id)
     .single();
 
-  if (profile?.role === "accountant") redirect("/dashboard/prices");
+  if (profile?.role === "accountant") redirect("/dashboard/invoices");
 
   const fyRange = getCurrentFinancialYearRange();
 

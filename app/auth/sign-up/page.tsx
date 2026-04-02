@@ -12,11 +12,12 @@ export default function SignUpPage() {
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-2 text-center">
             <Image
-              src="/BS_Logo-removebg-preview.png"
+              src="/VSN%20Groups%20LOGO.jpeg"
               alt="Billing Management System logo"
-              width={56}
-              height={56}
+              width={168}
+              height={168}
               className="h-14 w-14 object-contain drop-shadow-sm"
+              quality={100}
               priority
             />
             <div>

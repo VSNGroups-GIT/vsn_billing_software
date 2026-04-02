@@ -87,11 +87,12 @@ export default function LoginPage() {
         <div className="flex flex-col gap-8">
           <div className="flex flex-col items-center gap-4">
             <Image
-              src="/BS_Logo-removebg-preview.png"
+              src="/VSN%20Groups%20LOGO.jpeg"
               alt="Billing Management System logo"
-              width={64}
-              height={64}
+              width={192}
+              height={192}
               className="h-16 w-16 object-contain drop-shadow-lg"
+              quality={100}
               priority
             />
             <div className="text-center">

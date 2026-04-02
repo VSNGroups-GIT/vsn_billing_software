@@ -32,7 +32,7 @@ async function ProductsContent() {
 
   const { data: products } = await supabase
     .from("products")
-    .select("*, profiles!products_created_by_fkey(full_name)")
+    .select("*, operators(name), profiles!products_created_by_fkey(full_name)")
     .eq("organization_id", profile.organization_id)
     .order("position", { ascending: true })
 

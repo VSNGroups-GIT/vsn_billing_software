@@ -1,2 +1,0 @@
-Patch: comment out tax display in invoice-form.tsx
-Replaces the Tax display <div className="flex justify-between text-sm">...Tax...</div> with a JSX comment block so Tax is hidden from UI but calculations remain.

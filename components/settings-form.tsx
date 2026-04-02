@@ -61,59 +61,63 @@ export function SettingsForm({ organization }: { organization: Organization | nu
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="name">Organization Name</Label>
-        <Input
-          id="name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-        />
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="name">Organization Name</Label>
+          <Input
+            id="name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            required
+          />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="address">Address</Label>
+          <Textarea
+            id="address"
+            value={formData.address}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            rows={3}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="phone">Phone</Label>
+          <Input
+            id="phone"
+            type="tel"
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="tax_id">Tax ID / Business Number</Label>
+          <Input
+            id="tax_id"
+            value={formData.tax_id}
+            onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
+          />
+        </div>
       </div>
 
-      <div>
-        <Label htmlFor="address">Address</Label>
-        <Textarea
-          id="address"
-          value={formData.address}
-          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          rows={3}
-        />
+      <div className="flex items-center justify-end pt-1">
+        <Button type="submit" disabled={loading}>
+          {loading ? "Saving..." : "Save Settings"}
+        </Button>
       </div>
-
-      <div>
-        <Label htmlFor="phone">Phone</Label>
-        <Input
-          id="phone"
-          type="tel"
-          value={formData.phone}
-          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="tax_id">Tax ID / Business Number</Label>
-        <Input
-          id="tax_id"
-          value={formData.tax_id}
-          onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
-        />
-      </div>
-
-      <Button type="submit" disabled={loading}>
-        {loading ? "Saving..." : "Save Settings"}
-      </Button>
     </form>
   )
 }

@@ -13,7 +13,10 @@ export default async function NewProductPage() {
     redirect("/auth/login")
   }
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+  const [{ data: profile }, { data: operators }] = await Promise.all([
+    supabase.from("profiles").select("role, organization_id").eq("id", user.id).single(),
+    supabase.from("operators").select("id, name, is_active").order("name"),
+  ])
 
   return (
     <div className="p-6 lg:p-8">
@@ -23,7 +26,7 @@ export default async function NewProductPage() {
       </div>
 
       <div className="max-w-2xl">
-        <ProductForm userRole={profile?.role} />
+        <ProductForm operators={operators || []} userRole={profile?.role} />
       </div>
     </div>
   )

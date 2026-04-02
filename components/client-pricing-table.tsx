@@ -25,7 +25,6 @@ import { useState, useMemo, ReactNode } from "react";
 import { usePagination } from "@/hooks/use-pagination";
 import { TablePagination } from "@/components/table-pagination";
 import { useToast } from "@/hooks/use-toast";
-import { getPriceForCategoryOnDate } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
@@ -40,9 +39,9 @@ import {
 
 interface PricingRule {
   id: string;
+  operator_price: number | null;
   price_rule_type: string;
   price_rule_value: string | null;
-  price_category_id: string | null;
   fixed_base_value: number | null;
   notes: string | null;
   created_at: string;
@@ -56,18 +55,10 @@ interface PricingRule {
     name: string;
     paper_price: string;
   };
-  price_categories?: {
-    name: string;
-  } | null;
 }
 
 interface ClientPricingTableProps {
   pricingRules: PricingRule[];
-  priceHistory?: Array<{
-    price_category_id: string;
-    price: number;
-    effective_date: string;
-  }>;
   userRole?: string;
   toolbarLeft?: ReactNode;
 }
@@ -82,7 +73,6 @@ const ruleTypeLabels = {
 
 export function ClientPricingTable({
   pricingRules,
-  priceHistory = [],
   userRole,
   toolbarLeft,
 }: ClientPricingTableProps) {
@@ -91,8 +81,6 @@ export function ClientPricingTable({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState<string | null>(null);
-  const today = new Date().toISOString().split("T")[0];
-
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -119,22 +107,13 @@ export function ClientPricingTable({
     const exportData = processedRules.map((rule) => ({
       Client: rule.clients.name,
       Product: rule.products.name,
+      "Operator Price": `₹${calculateOperatorPrice(rule).toFixed(2)}`,
       "Base Price Type":
-        rule.fixed_base_value !== null ? "Fixed Value" : "Category",
+        rule.fixed_base_value !== null ? "Fixed Value" : "Default",
       "Base Category / Fixed Value":
         rule.fixed_base_value !== null
           ? `₹${rule.fixed_base_value.toFixed(2)}`
-          : rule.price_categories?.name || "—",
-      "Price (Today)":
-        rule.fixed_base_value !== null
-          ? `₹${rule.fixed_base_value.toFixed(2)}`
-          : rule.price_category_id
-            ? getPriceForCategoryOnDate(
-                rule.price_category_id,
-                today,
-                priceHistory,
-              )?.toFixed(2) || "N/A"
-            : "N/A",
+          : `₹${Number(rule.products.paper_price || 0).toFixed(2)}`,
       "Rule Type":
         ruleTypeLabels[rule.price_rule_type as keyof typeof ruleTypeLabels],
       "Rule Value":
@@ -148,6 +127,8 @@ export function ClientPricingTable({
                 ? `<₹${Number(rule.conditional_threshold || 0).toFixed(0)}: -₹${Number(rule.conditional_discount_below || 0).toFixed(0)} | ≥₹${Number(rule.conditional_threshold || 0).toFixed(0)}: -₹${Number(rule.conditional_discount_above_equal || 0).toFixed(0)}`
                 : `× ${rule.price_rule_value}`,
       "Final Price": `₹${calculateFinalPrice(rule).toFixed(2)}`,
+      "Margin Amount": `₹${calculateMarginValue(rule).toFixed(2)}`,
+      "Margin %": `${calculateMarginPercent(rule).toFixed(2)}%`,
       Notes: rule.notes || "",
       "Created At": new Date(rule.created_at).toLocaleDateString(),
     }));
@@ -202,25 +183,14 @@ export function ClientPricingTable({
     setFilters((prev) => ({ ...prev, [column]: value }));
   };
 
-  const calculateFinalPrice = (rule: PricingRule) => {
-    // Get base price (prefer fixed_base_value, then category price, then paper price)
-    let basePrice = 0;
+  const calculateOperatorPrice = (rule: PricingRule) =>
+    Number(rule.operator_price ?? rule.products.paper_price ?? 0);
 
-    if (rule.fixed_base_value !== null) {
-      basePrice = rule.fixed_base_value;
-    } else if (rule.price_category_id) {
-      const categoryPrice = getPriceForCategoryOnDate(
-        rule.price_category_id,
-        today,
-        priceHistory,
-      );
-      basePrice =
-        categoryPrice !== null
-          ? categoryPrice
-          : Number(rule.products.paper_price);
-    } else {
-      basePrice = Number(rule.products.paper_price);
-    }
+  const calculateFinalPrice = (rule: PricingRule) => {
+    const basePrice =
+      rule.fixed_base_value !== null
+        ? rule.fixed_base_value
+        : Number(rule.products.paper_price);
 
     const ruleValue = Number(rule.price_rule_value || 0);
 
@@ -240,6 +210,15 @@ export function ClientPricingTable({
     }
   };
 
+  const calculateMarginValue = (rule: PricingRule) =>
+    calculateFinalPrice(rule) - calculateOperatorPrice(rule);
+
+  const calculateMarginPercent = (rule: PricingRule) => {
+    const finalPrice = calculateFinalPrice(rule);
+    if (finalPrice <= 0) return 0;
+    return (calculateMarginValue(rule) / finalPrice) * 100;
+  };
+
   // Apply filtering and sorting
   const processedRules = useMemo(() => {
     let filtered = [...pricingRules];
@@ -257,7 +236,7 @@ export function ClientPricingTable({
     }
     if (filters.category) {
       filtered = filtered.filter((r) =>
-        (r.price_categories?.name || "")
+        (r.fixed_base_value !== null ? "fixed value" : "default")
           .toLowerCase()
           .includes(filters.category.toLowerCase()),
       );
@@ -279,26 +258,8 @@ export function ClientPricingTable({
             bVal = b.products.name;
             break;
           case "category":
-            aVal = a.price_categories?.name || "";
-            bVal = b.price_categories?.name || "";
-            break;
-          case "category_price":
-            const aCatPrice = a.price_category_id
-              ? getPriceForCategoryOnDate(
-                  a.price_category_id,
-                  today,
-                  priceHistory,
-                )
-              : null;
-            const bCatPrice = b.price_category_id
-              ? getPriceForCategoryOnDate(
-                  b.price_category_id,
-                  today,
-                  priceHistory,
-                )
-              : null;
-            aVal = aCatPrice !== null ? aCatPrice : 0;
-            bVal = bCatPrice !== null ? bCatPrice : 0;
+            aVal = a.fixed_base_value !== null ? "Fixed Value" : "Default";
+            bVal = b.fixed_base_value !== null ? "Fixed Value" : "Default";
             break;
           case "rule_type":
             aVal = a.price_rule_type;
@@ -307,6 +268,10 @@ export function ClientPricingTable({
           case "final_price":
             aVal = calculateFinalPrice(a);
             bVal = calculateFinalPrice(b);
+            break;
+          case "margin":
+            aVal = calculateMarginValue(a);
+            bVal = calculateMarginValue(b);
             break;
           default:
             return 0;
@@ -319,7 +284,7 @@ export function ClientPricingTable({
     }
 
     return filtered;
-  }, [pricingRules, filters, sortColumn, sortDirection, today, priceHistory]);
+  }, [pricingRules, filters, sortColumn, sortDirection]);
 
   const pagination = usePagination({
     items: processedRules,
@@ -363,7 +328,7 @@ export function ClientPricingTable({
     setIsDeleting(false);
   };
 
-  const colSpan = userRole !== "admin" ? 8 : 7;
+  const colSpan = userRole !== "admin" ? 9 : 8;
 
   return (
     <>
@@ -401,15 +366,8 @@ export function ClientPricingTable({
                 className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("category")}
               >
-                Base Category
+                Base Type
                 <SortIcon column="category" />
-              </TableHead>
-              <TableHead
-                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
-                onClick={() => handleSort("category_price")}
-              >
-                Category Price
-                <SortIcon column="category_price" />
               </TableHead>
               <TableHead
                 className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
@@ -421,12 +379,22 @@ export function ClientPricingTable({
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
                 Value
               </TableHead>
+              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 text-right">
+                Operator Price
+              </TableHead>
               <TableHead
                 className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("final_price")}
               >
                 Final Price
                 <SortIcon column="final_price" />
+              </TableHead>
+              <TableHead
+                className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3 text-right"
+                onClick={() => handleSort("margin")}
+              >
+                Margin %
+                <SortIcon column="margin" />
               </TableHead>
               {userRole !== "admin" && (
                 <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">
@@ -463,9 +431,10 @@ export function ClientPricingTable({
                   className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
               <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
               <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
               {userRole !== "admin" && (
                 <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
@@ -483,13 +452,8 @@ export function ClientPricingTable({
             )}
             {pagination.paginatedItems.map((rule) => {
               const finalPrice = calculateFinalPrice(rule);
-              const categoryPrice = rule.price_category_id
-                ? getPriceForCategoryOnDate(
-                    rule.price_category_id,
-                    today,
-                    priceHistory,
-                  )
-                : null;
+              const operatorPrice = calculateOperatorPrice(rule);
+              const marginPercent = calculateMarginPercent(rule);
 
               return (
                 <TableRow key={rule.id}>
@@ -505,22 +469,7 @@ export function ClientPricingTable({
                         Fixed Value
                       </span>
                     ) : (
-                      <span className="font-medium text-blue-600 text-xs">
-                        {rule.price_categories?.name || "—"}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
-                    {rule.fixed_base_value !== null ? (
-                      <span className="font-semibold text-purple-600 text-xs">
-                        ₹{rule.fixed_base_value.toFixed(2)}
-                      </span>
-                    ) : categoryPrice !== null ? (
-                      <span className="font-semibold text-green-600 text-xs">
-                        ₹{categoryPrice.toFixed(2)}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400 text-xs">No price</span>
+                      <span className="font-medium text-blue-600 text-xs">Default</span>
                     )}
                   </TableCell>
                   <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
@@ -557,8 +506,14 @@ export function ClientPricingTable({
                       </span>
                     )}
                   </TableCell>
+                  <TableCell className="hidden md:table-cell text-right px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-slate-700">
+                    ₹{operatorPrice.toFixed(2)}
+                  </TableCell>
                   <TableCell className="font-bold text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
                     ₹{finalPrice.toFixed(2)}
+                  </TableCell>
+                  <TableCell className={`px-2 sm:px-4 py-2 sm:py-3 text-right text-xs sm:text-sm font-semibold ${marginPercent < 0 ? "text-red-600" : "text-blue-700"}`}>
+                    {marginPercent.toFixed(2)}%
                   </TableCell>
                   {userRole !== "admin" && (
                     <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">

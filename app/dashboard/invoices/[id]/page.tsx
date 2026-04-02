@@ -24,9 +24,7 @@ export default async function InvoiceDetailPage({
         address,
         city,
         state,
-        zip_code,
-        enable_per_bird,
-        value_per_bird
+        zip_code
       ),
       invoice_items (
         description,

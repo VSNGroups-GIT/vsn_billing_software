@@ -7,7 +7,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +19,7 @@ interface Client {
   id: string;
   name: string;
   email: string;
+  tax_id?: string | null;
   phone: string | null;
   address: string | null;
   city: string | null;
@@ -29,8 +29,6 @@ interface Client {
   notes: string | null;
   due_days?: number | null;
   due_days_type?: string | null;
-  enable_per_bird?: boolean | null;
-  value_per_bird?: number | null;
 }
 
 interface ClientFormProps {
@@ -47,6 +45,7 @@ export function ClientForm({ client }: ClientFormProps) {
   const [formData, setFormData] = useState({
     name: client?.name || "",
     email: client?.email || "",
+    tax_id: client?.tax_id || "",
     phone: client?.phone || "",
     address: client?.address || "",
     city: client?.city || "",
@@ -56,8 +55,6 @@ export function ClientForm({ client }: ClientFormProps) {
     notes: client?.notes || "",
     due_days: client?.due_days?.toString() || "30",
     due_days_type: client?.due_days_type || "fixed_days",
-    enable_per_bird: client?.enable_per_bird || false,
-    value_per_bird: client?.value_per_bird?.toString() || "0",
   });
 
   const handlePincodeChange = async (pincode: string) => {
@@ -169,20 +166,6 @@ export function ClientForm({ client }: ClientFormProps) {
       }
 
       const dueDays = Number(formData.due_days) || 0;
-      const valuePerBirdRaw = formData.enable_per_bird
-        ? formData.value_per_bird.trim()
-        : "0";
-      const valuePerBird = valuePerBirdRaw === "" ? 0 : Number(valuePerBirdRaw);
-
-      if (Number.isNaN(valuePerBird)) {
-        toast({
-          variant: "destructive",
-          title: "Invalid per-bird value",
-          description: "Please enter a valid number (can be negative).",
-        });
-        setIsLoading(false);
-        return;
-      }
 
       if (client) {
         // Update existing client
@@ -191,7 +174,6 @@ export function ClientForm({ client }: ClientFormProps) {
           .update({
             ...formData,
             due_days: dueDays,
-            value_per_bird: valuePerBird,
           })
           .eq("id", client.id);
 
@@ -207,7 +189,6 @@ export function ClientForm({ client }: ClientFormProps) {
         const { error } = await supabase.from("clients").insert({
           ...formData,
           due_days: dueDays,
-          value_per_bird: valuePerBird,
           created_by: user.id,
           organization_id: profile.organization_id,
         });
@@ -306,6 +287,18 @@ export function ClientForm({ client }: ClientFormProps) {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="tax_id">GST / Tax ID</Label>
+              <Input
+                id="tax_id"
+                value={formData.tax_id}
+                onChange={(e) =>
+                  setFormData({ ...formData, tax_id: e.target.value })
+                }
+                placeholder="27ABCDE1234F1Z5"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="due_days_type">Due Payment Type</Label>
               <SearchableSelect
                 id="due_days_type"
@@ -350,43 +343,6 @@ export function ClientForm({ client }: ClientFormProps) {
                   same month-end, 1 for next month-end, etc.
                 </p>
               )}
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <div className="rounded-lg border p-4 bg-white space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">Per‑bird</span>
-                  <Switch
-                    id="enable_per_bird"
-                    checked={formData.enable_per_bird}
-                    onCheckedChange={(checked) =>
-                      setFormData({ ...formData, enable_per_bird: checked })
-                    }
-                  />
-                </div>
-
-                {formData.enable_per_bird && (
-                  <div className="mt-2 space-y-2">
-                    <Label htmlFor="value_per_bird">Value per bird (₹)</Label>
-                    <Input
-                      id="value_per_bird"
-                      type="number"
-                      step="0.01"
-                      value={formData.value_per_bird}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          value_per_bird: e.target.value,
-                        })
-                      }
-                      placeholder="e.g., 1.50 or -0.75"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Positive adds charge per bird; negative applies discount.
-                    </p>
-                  </div>
-                )}
-              </div>
             </div>
 
             <div className="space-y-2">

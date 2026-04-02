@@ -22,7 +22,6 @@ import {
   Settings,
   Briefcase,
   CreditCard,
-  Tag,
   ChevronLeft,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -107,11 +106,23 @@ export function DashboardNav({ profile }: DashboardNavProps) {
         roles: ["super_admin", "admin"],
       },
       {
-        href: "/dashboard/prices",
-        label: "Prices",
-        icon: Tag,
-        roles: ["super_admin", "admin", "accountant"],
+        href: "/dashboard/operators",
+        label: "Operators",
+        icon: Users,
+        roles: ["super_admin", "admin"],
       },
+        {
+          href: "/dashboard/operators/invoices",
+          label: "Operator Invoices",
+          icon: FileText,
+          roles: ["super_admin", "admin"],
+        },
+        {
+          href: "/dashboard/operators/payments",
+          label: "Operator Payments",
+          icon: Banknote,
+          roles: ["super_admin", "admin"],
+        },
       {
         href: "/dashboard/client-pricing",
         label: "Pricing Rules",
@@ -121,6 +132,12 @@ export function DashboardNav({ profile }: DashboardNavProps) {
       {
         href: "/dashboard/invoices",
         label: "Invoices",
+        icon: FileText,
+        roles: ["super_admin", "admin", "accountant"],
+      },
+      {
+        href: "/dashboard/quotations",
+        label: "Quotations",
         icon: FileText,
         roles: ["super_admin", "admin", "accountant"],
       },
@@ -144,27 +161,9 @@ export function DashboardNav({ profile }: DashboardNavProps) {
       },
     ];
 
-    const filtered = allNavItems.filter((item) =>
+    return allNavItems.filter((item) =>
       item.roles.includes(role || "accountant"),
     );
-    // For accountants, point Prices to Update Prices and move it to top
-    if ((role || "accountant") === "accountant") {
-      const adjusted = filtered.map((item) =>
-        item.href === "/dashboard/prices"
-          ? { ...item, href: "/dashboard/prices/new" }
-          : item,
-      );
-      return adjusted.sort((a, b) => {
-        const aIsPrices =
-          a.href === "/dashboard/prices" || a.href === "/dashboard/prices/new";
-        const bIsPrices =
-          b.href === "/dashboard/prices" || b.href === "/dashboard/prices/new";
-        if (aIsPrices && !bIsPrices) return -1;
-        if (!aIsPrices && bIsPrices) return 1;
-        return 0;
-      });
-    }
-    return filtered;
   };
 
   const navItems = getNavItemsForRole(profile?.role);
@@ -201,11 +200,12 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             )}
           >
             <Image
-              src="/BS%20Logo.jpeg"
+              src="/VSN%20Groups%20LOGO.jpeg"
               alt="Billing Management System logo"
-              width={44}
-              height={44}
-              className="h-11 w-11 rounded-lg object-cover shadow-sm flex-shrink-0"
+              width={132}
+              height={132}
+              className="h-11 w-11 rounded-lg object-contain shadow-sm flex-shrink-0"
+              quality={100}
               priority
             />
             {!isSidebarCollapsed && (

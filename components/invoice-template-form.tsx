@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { useToast } from "@/hooks/use-toast"
 
 interface InvoiceTemplate {
   id?: string
@@ -18,17 +19,73 @@ interface InvoiceTemplate {
   company_logo_url: string
   company_logo_file: string | null
   tax_label: string
+  note_content: string
+  payment_instructions: string
   terms_and_conditions: string
+  whatsapp_template_rows: WhatsAppTemplateRow[]
+}
+
+interface WhatsAppTemplateRow {
+  category: string
+  price_per_message: string
+  template_type: string
 }
 
 interface InvoiceTemplateFormProps {
   existingTemplate?: InvoiceTemplate | null
 }
 
-const DEFAULT_LOGO_URL = "/BS%20Logo.jpeg"
+const DEFAULT_LOGO_URL = "/VSN%20Groups%20LOGO.jpeg"
+
+const DEFAULT_WHATSAPP_TEMPLATE_ROWS: WhatsAppTemplateRow[] = [
+  {
+    category: "Marketing",
+    price_per_message: "89.5-Paisa",
+    template_type:
+      "Include promotions or offers, informational updates, or invitation for customers to respond/take action. Any conversation that does not qualify as utility or authentication",
+  },
+  {
+    category: "Utility",
+    price_per_message: "25-Paisa",
+    template_type:
+      "Facilitate a specific, agreed-upon request or transaction or update to a customer about an ongoing transaction, including post-purchase notifications and recurring billing",
+  },
+  {
+    category: "Authentication",
+    price_per_message: "16-Paisa",
+    template_type:
+      "Enable businesses to authenticate users with one-time passcodes, potentially at multiple steps in the login process(e.g., account verification, account recovery, integrity challenges)",
+  },
+  {
+    category: "Service",
+    price_per_message: "0-Paisa",
+    template_type:
+      "All user-initiated conversations will be categorized as service conversations, which help customers resolve enquiries.",
+  },
+]
+
+const normalizeWhatsappTemplateRows = (rows: unknown): WhatsAppTemplateRow[] => {
+  if (!Array.isArray(rows)) return DEFAULT_WHATSAPP_TEMPLATE_ROWS
+
+  const normalizedRows = rows
+    .map((row) => {
+      if (!row || typeof row !== "object") return null
+      const candidate = row as Partial<WhatsAppTemplateRow>
+      return {
+        category: typeof candidate.category === "string" ? candidate.category : "",
+        price_per_message: typeof candidate.price_per_message === "string" ? candidate.price_per_message : "",
+        template_type: typeof candidate.template_type === "string" ? candidate.template_type : "",
+      }
+    })
+    .filter((row): row is WhatsAppTemplateRow => !!row)
+    .filter((row) => row.category || row.price_per_message || row.template_type)
+
+  return normalizedRows.length > 0 ? normalizedRows : DEFAULT_WHATSAPP_TEMPLATE_ROWS
+}
 
 export function InvoiceTemplateForm({ existingTemplate }: InvoiceTemplateFormProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(
@@ -43,8 +100,41 @@ export function InvoiceTemplateForm({ existingTemplate }: InvoiceTemplateFormPro
     company_logo_url: existingTemplate?.company_logo_url || (existingTemplate?.company_logo_file ? "" : DEFAULT_LOGO_URL),
     company_logo_file: existingTemplate?.company_logo_file || null,
     tax_label: existingTemplate?.tax_label || "GST",
+    note_content:
+      existingTemplate?.note_content ||
+      "1. Material once sold will not be taken back.\n2. Kindly verify quantity and amount before confirmation.",
+    payment_instructions:
+      existingTemplate?.payment_instructions ||
+      "1. Please make all payments to the company account only.\n2. Share payment confirmation with transaction reference.\n3. Contact billing support for any clarification.",
     terms_and_conditions: existingTemplate?.terms_and_conditions || "Payment is due within 30 days. Late payments may incur additional charges.",
+    whatsapp_template_rows: normalizeWhatsappTemplateRows(existingTemplate?.whatsapp_template_rows),
   })
+
+  const updateWhatsappRow = (index: number, field: keyof WhatsAppTemplateRow, value: string) => {
+    setFormData({
+      ...formData,
+      whatsapp_template_rows: formData.whatsapp_template_rows.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row
+      ),
+    })
+  }
+
+  const addWhatsappRow = () => {
+    setFormData({
+      ...formData,
+      whatsapp_template_rows: [
+        ...formData.whatsapp_template_rows,
+        { category: "", price_per_message: "", template_type: "" },
+      ],
+    })
+  }
+
+  const removeWhatsappRow = (index: number) => {
+    setFormData({
+      ...formData,
+      whatsapp_template_rows: formData.whatsapp_template_rows.filter((_, rowIndex) => rowIndex !== index),
+    })
+  }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -125,10 +215,21 @@ export function InvoiceTemplateForm({ existingTemplate }: InvoiceTemplateFormPro
         if (error) throw error
       }
 
+      toast({
+        variant: "success",
+        title: "Success",
+        description: "Invoice template settings updated successfully!",
+      })
       router.push("/dashboard/settings")
       router.refresh()
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      const message = error instanceof Error ? error.message : "An error occurred"
+      setError(message)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error updating settings: " + message,
+      })
     } finally {
       setIsLoading(false)
     }
@@ -287,6 +388,28 @@ export function InvoiceTemplateForm({ existingTemplate }: InvoiceTemplateFormPro
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="note_content">Notes (Print Template)</Label>
+            <Textarea
+              id="note_content"
+              value={formData.note_content}
+              onChange={(e) => setFormData({ ...formData, note_content: e.target.value })}
+              placeholder="Line-wise notes shown in invoice print"
+              rows={4}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="payment_instructions">Payment Instructions (Print Template)</Label>
+            <Textarea
+              id="payment_instructions"
+              value={formData.payment_instructions}
+              onChange={(e) => setFormData({ ...formData, payment_instructions: e.target.value })}
+              placeholder="Line-wise payment instructions shown in invoice print"
+              rows={4}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="terms_and_conditions">Terms & Conditions</Label>
             <Textarea
               id="terms_and_conditions"
@@ -295,6 +418,68 @@ export function InvoiceTemplateForm({ existingTemplate }: InvoiceTemplateFormPro
               placeholder="Payment terms and conditions..."
               rows={4}
             />
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>WhatsApp Quotation Category Table</Label>
+                <p className="text-sm text-muted-foreground">
+                  Configure the rows shown in the WhatsApp quotation category pricing table.
+                </p>
+              </div>
+              <Button type="button" variant="outline" onClick={addWhatsappRow}>
+                Add Row
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {formData.whatsapp_template_rows.map((row, index) => (
+                <div key={`${row.category}-${index}`} className="space-y-3 rounded-lg border p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm font-medium">Row {index + 1}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => removeWhatsappRow(index)}
+                      disabled={formData.whatsapp_template_rows.length === 1}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Category</Label>
+                      <Input
+                        value={row.category}
+                        onChange={(e) => updateWhatsappRow(index, "category", e.target.value)}
+                        placeholder="Marketing"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Price per Message</Label>
+                      <Input
+                        value={row.price_per_message}
+                        onChange={(e) => updateWhatsappRow(index, "price_per_message", e.target.value)}
+                        placeholder="89.5-Paisa"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Type of Template</Label>
+                    <Textarea
+                      value={row.template_type}
+                      onChange={(e) => updateWhatsappRow(index, "template_type", e.target.value)}
+                      placeholder="Template description shown in the WhatsApp quotation"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {error && <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>}

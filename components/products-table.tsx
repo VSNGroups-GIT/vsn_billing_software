@@ -45,9 +45,13 @@ interface Product {
   id: string
   name: string
   description: string | null
+  hsn_code?: string | null
   is_active: boolean
   created_at: string
   position?: number
+  operators?: {
+    name: string
+  } | null
   profiles?: {
     full_name: string
   }
@@ -93,6 +97,12 @@ function SortableProductRow({
       <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[100px] sm:max-w-none truncate">{product.name}</TableCell>
       <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3 max-w-xs truncate">
         {product.description || <span className="text-muted-foreground">-</span>}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 max-w-[120px] truncate">
+        {product.hsn_code || <span className="text-muted-foreground">-</span>}
+      </TableCell>
+      <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 max-w-xs truncate">
+        {product.operators?.name || <span className="text-muted-foreground">-</span>}
       </TableCell>
       <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
         {product.is_active ? (
@@ -150,6 +160,8 @@ export function ProductsTable({ products }: ProductsTableProps) {
   const [filters, setFilters] = useState({
     name: '',
     description: '',
+    hsn_code: '',
+    operator: '',
   })
 
   const handleSort = (column: string) => {
@@ -180,6 +192,16 @@ export function ProductsTable({ products }: ProductsTableProps) {
         (p.description || '').toLowerCase().includes(filters.description.toLowerCase())
       )
     }
+    if (filters.hsn_code) {
+      filtered = filtered.filter(p =>
+        (p.hsn_code || '').toLowerCase().includes(filters.hsn_code.toLowerCase())
+      )
+    }
+    if (filters.operator) {
+      filtered = filtered.filter(p =>
+        (p.operators?.name || '').toLowerCase().includes(filters.operator.toLowerCase())
+      )
+    }
 
     // Apply sorting
     if (sortColumn) {
@@ -196,9 +218,17 @@ export function ProductsTable({ products }: ProductsTableProps) {
             aVal = a.description || ''
             bVal = b.description || ''
             break
+          case 'hsn_code':
+            aVal = a.hsn_code || ''
+            bVal = b.hsn_code || ''
+            break
           case 'is_active':
             aVal = a.is_active ? 1 : 0
             bVal = b.is_active ? 1 : 0
+            break
+          case 'operator':
+            aVal = a.operators?.name || ''
+            bVal = b.operators?.name || ''
             break
           default:
             return 0
@@ -292,6 +322,12 @@ export function ProductsTable({ products }: ProductsTableProps) {
     const columns: ExportColumn[] = [
       { key: "name", label: "Product Name" },
       { key: "description", label: "Description" },
+      { key: "hsn_code", label: "HSN Code" },
+      {
+        key: "operators",
+        label: "Operator",
+        formatter: (val) => (val && typeof val === "object" && "name" in val ? String(val.name) : ""),
+      },
       {
         key: "is_active",
         label: "Active",
@@ -339,6 +375,12 @@ export function ProductsTable({ products }: ProductsTableProps) {
                 <TableHead className="hidden sm:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('description')}>
                   Description<SortIcon column="description" />
                 </TableHead>
+                <TableHead className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('hsn_code')}>
+                  HSN Code<SortIcon column="hsn_code" />
+                </TableHead>
+                <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('operator')}>
+                  Operator<SortIcon column="operator" />
+                </TableHead>
                 <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('is_active')}>
                   Status<SortIcon column="is_active" />
                 </TableHead>
@@ -359,6 +401,22 @@ export function ProductsTable({ products }: ProductsTableProps) {
                     placeholder="Filter..."
                     value={filters.description}
                     onChange={(e) => handleFilterChange('description', e.target.value)}
+                    className="h-8"
+                  />
+                </TableHead>
+                <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2">
+                  <Input
+                    placeholder="Filter..."
+                    value={filters.hsn_code}
+                    onChange={(e) => handleFilterChange('hsn_code', e.target.value)}
+                    className="h-8"
+                  />
+                </TableHead>
+                <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2">
+                  <Input
+                    placeholder="Filter..."
+                    value={filters.operator}
+                    onChange={(e) => handleFilterChange('operator', e.target.value)}
                     className="h-8"
                   />
                 </TableHead>
