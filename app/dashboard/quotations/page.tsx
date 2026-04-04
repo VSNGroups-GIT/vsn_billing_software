@@ -33,7 +33,7 @@ export default async function QuotationsPage() {
     supabase.from("clients").select("id, name").order("name", { ascending: true }),
     supabase
       .from("quotations")
-      .select("*, clients(name, email), profiles!quotations_created_by_fkey(full_name)")
+      .select("*, clients(name, email), profiles!quotations_created_by_fkey(full_name, email)")
       .order("created_at", { ascending: false }),
   ]);
 

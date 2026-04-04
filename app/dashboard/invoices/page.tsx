@@ -31,6 +31,10 @@ export default async function InvoicesPage() {
     redirect("/dashboard/gst-filings");
   }
 
+  if (userRole === "billing_executive") {
+    redirect("/dashboard/clients");
+  }
+
   // Get all clients for selector
   const { data: clients } = await supabase
     .from("clients")
@@ -43,7 +47,7 @@ export default async function InvoicesPage() {
       `
       *,
       clients(name, email),
-      profiles!invoices_created_by_fkey(full_name)
+      profiles!invoices_created_by_fkey(full_name, email)
     `,
     )
     .order("created_at", { ascending: false });

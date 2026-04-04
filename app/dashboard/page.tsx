@@ -59,7 +59,7 @@ export default async function DashboardPage() {
 
   if (profile?.role === "accountant") redirect("/dashboard/gst-filings");
   if (profile?.role === "admin") redirect("/dashboard/clients");
-  if (profile?.role === "billing_executive") redirect("/dashboard/invoices");
+  if (profile?.role === "billing_executive") redirect("/dashboard/quotations");
 
   const fyRange = getCurrentFinancialYearRange();
 

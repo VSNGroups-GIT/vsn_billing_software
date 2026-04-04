@@ -26,5 +26,9 @@ export default async function PaymentsLayout({
     redirect("/dashboard/gst-filings");
   }
 
+  if (profile?.role === "billing_executive") {
+    redirect("/dashboard/clients");
+  }
+
   return <>{children}</>;
 }

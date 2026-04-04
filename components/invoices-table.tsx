@@ -54,6 +54,10 @@ interface Invoice {
     name: string;
     email: string;
   };
+  profiles?: {
+    full_name: string | null;
+    email: string | null;
+  } | null;
 }
 
 interface InvoicesTableProps {
@@ -83,6 +87,7 @@ export function InvoicesTable({
   fromDate = "",
   toDate = "",
 }: InvoicesTableProps) {
+  const showCreatedBy = userRole === "super_admin";
   const router = useRouter();
   const { toast } = useToast();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -101,6 +106,7 @@ export function InvoicesTable({
     invoice_number: "",
     client: "",
     status: "",
+    creator: "",
   });
 
   // Date range filter (by issue_date)
@@ -123,6 +129,7 @@ export function InvoicesTable({
     const invoiceQuery = filters.invoice_number.trim().toLowerCase();
     const clientQuery = filters.client.trim().toLowerCase();
     const statusQuery = filters.status.trim().toLowerCase();
+    const creatorQuery = filters.creator.trim().toLowerCase();
 
     // Apply filters
     if (invoiceQuery) {
@@ -141,6 +148,13 @@ export function InvoicesTable({
       filtered = filtered.filter((inv) =>
         inv.status.toLowerCase().includes(statusQuery),
       );
+    }
+    if (creatorQuery) {
+      filtered = filtered.filter((inv) => {
+        const creatorName = inv.profiles?.full_name?.toLowerCase() || "";
+        const creatorEmail = inv.profiles?.email?.toLowerCase() || "";
+        return creatorName.includes(creatorQuery) || creatorEmail.includes(creatorQuery);
+      });
     }
 
     // Apply sorting
@@ -181,6 +195,10 @@ export function InvoicesTable({
           case "status":
             aVal = a.status;
             bVal = b.status;
+            break;
+          case "creator":
+            aVal = a.profiles?.full_name || a.profiles?.email || "";
+            bVal = b.profiles?.full_name || b.profiles?.email || "";
             break;
           default:
             return 0;
@@ -299,6 +317,11 @@ export function InvoicesTable({
         formatter: (status) =>
           statusConfig[status as keyof typeof statusConfig]?.label || status,
       },
+      {
+        key: "profiles",
+        label: "Created By",
+        formatter: (profile) => profile?.full_name || profile?.email || "-",
+      },
     ];
 
     await exportToCSVAsync(enrichedInvoices, columns, `invoices-${getTimestamp()}.csv`);
@@ -332,6 +355,8 @@ export function InvoicesTable({
       status_label:
         statusConfig[invoice.status as keyof typeof statusConfig]?.label ||
         invoice.status,
+      created_by_label:
+        invoice.profiles?.full_name || invoice.profiles?.email || "-",
     }));
 
     const pdfColumns: ExportColumn[] = [
@@ -343,6 +368,7 @@ export function InvoicesTable({
       { key: "paid_fmt", label: "Paid" },
       { key: "due_fmt", label: "Due" },
       { key: "status_label", label: "Status" },
+      { key: "created_by_label", label: "Created By" },
     ];
 
     const rangeLabel =
@@ -462,6 +488,15 @@ export function InvoicesTable({
                     Status
                     <SortIcon column="status" />
                   </TableHead>
+                  {showCreatedBy && (
+                    <TableHead
+                      className="hidden xl:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                      onClick={() => handleSort("creator")}
+                    >
+                      Created By
+                      <SortIcon column="creator" />
+                    </TableHead>
+                  )}
                   <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">
                     Actions
                   </TableHead>
@@ -503,6 +538,16 @@ export function InvoicesTable({
                       className="h-7 text-xs"
                     />
                   </TableHead>
+                  {showCreatedBy && (
+                    <TableHead className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                      <Input
+                        placeholder="Filter..."
+                        value={filters.creator}
+                        onChange={(e) => handleFilterChange("creator", e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -616,6 +661,18 @@ export function InvoicesTable({
                           {config.label}
                         </Badge>
                       </TableCell>
+                      {showCreatedBy && (
+                        <TableCell className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium">
+                              {invoice.profiles?.full_name || "Unknown User"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {invoice.profiles?.email || "-"}
+                            </span>
+                          </div>
+                        </TableCell>
+                      )}
                       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                         <div className="flex justify-end gap-1 sm:gap-2">
                           <Button variant="ghost" size="sm" asChild>

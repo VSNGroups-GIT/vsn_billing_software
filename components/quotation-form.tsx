@@ -294,11 +294,6 @@ export function QuotationForm({
         throw new Error("Client is required");
       }
 
-      const quotationNumber = sanitizeQuotationNumberInput(formData.quotation_number);
-      if (!quotationNumber) {
-        throw new Error("Quotation number is required");
-      }
-
       const cleanItems = items.filter(
         (item) => item.product_id && Number(item.quantity) > 0,
       );
@@ -325,15 +320,17 @@ export function QuotationForm({
       let quotationId = initialQuotation?.id;
 
       if (!quotationId) {
-        const { data: duplicate } = await supabase
-          .from("quotations")
-          .select("id")
-          .eq("quotation_number", quotationNumber)
-          .maybeSingle();
+        // Always allocate the next number in DB to avoid RLS visibility collisions.
+        const { data: generatedQuotationNumber, error: generateNumberError } =
+          await supabase.rpc("next_document_number", {
+            p_doc_type: "quotation",
+          });
 
-        if (duplicate) {
-          throw new Error(`Quotation number \"${quotationNumber}\" already exists`);
+        if (generateNumberError || !generatedQuotationNumber) {
+          throw generateNumberError || new Error("Failed to generate quotation number");
         }
+
+        const quotationNumber = String(generatedQuotationNumber);
 
         const { data: created, error: createError } = await supabase
           .from("quotations")
@@ -441,8 +438,16 @@ export function QuotationForm({
                     quotation_number: sanitizeQuotationNumberInput(e.target.value),
                   }))
                 }
-                required
+                placeholder={
+                  initialQuotation?.id ? "Quotation number" : "Auto-generated on save"
+                }
+                disabled
               />
+              <p className="text-xs text-muted-foreground">
+                {initialQuotation?.id
+                  ? "Quotation number cannot be changed"
+                  : "Quotation number is auto-generated when you save."}
+              </p>
             </div>
 
             <div className="space-y-2">

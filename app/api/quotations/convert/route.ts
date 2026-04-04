@@ -1,25 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-const sanitizeInvoiceNumberInput = (value: string) =>
-  value.replace(/[^A-Za-z0-9-]/g, "");
-
-const getNextInvoiceNumber = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return "INV-0001";
-
-  const match = trimmed.match(/^(.*?)(\d+)$/);
-  if (!match) return `${sanitizeInvoiceNumberInput(trimmed)}-001`;
-
-  const prefix = match[1];
-  const numericPart = match[2];
-  const nextValue = (Number(numericPart) + 1)
-    .toString()
-    .padStart(numericPart.length, "0");
-
-  return sanitizeInvoiceNumberInput(`${prefix}${nextValue}`);
-};
-
 const computeDueDate = (
   issueDate: string,
   days: number | null | undefined,
@@ -99,17 +80,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Quotation has no items" }, { status: 400 });
     }
 
-    const { data: latestInvoice } = await supabase
-      .from("invoices")
-      .select("invoice_number")
-      .eq("organization_id", quotation.organization_id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: generatedInvoiceNumber, error: generateNumberError } =
+      await supabase.rpc("next_document_number", {
+        p_doc_type: "invoice",
+      });
 
-    const invoiceNumber = latestInvoice?.invoice_number
-      ? getNextInvoiceNumber(latestInvoice.invoice_number)
-      : "INV-0001";
+    if (generateNumberError || !generatedInvoiceNumber) {
+      return NextResponse.json(
+        { error: "Failed to generate invoice number" },
+        { status: 400 },
+      );
+    }
+
+    const invoiceNumber = String(generatedInvoiceNumber);
 
     const { data: invoice, error: invoiceError } = await supabase
       .from("invoices")

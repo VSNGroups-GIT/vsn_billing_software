@@ -19,10 +19,6 @@ export default async function NewClientPage() {
     .eq("id", user.id)
     .maybeSingle()
 
-  if (profile?.role === "billing_executive") {
-    redirect("/dashboard/clients")
-  }
-
   if (profile?.role === "accountant") {
     redirect("/dashboard/gst-filings")
   }

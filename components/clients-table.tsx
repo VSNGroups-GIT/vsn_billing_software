@@ -313,7 +313,7 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
                 <SortIcon column="created_at" />
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                {userRole === "billing_executive" ? "View" : "Actions"}
+                Actions
               </TableHead>
             </TableRow>
             <TableRow>
@@ -406,25 +406,21 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
                 </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                   <div className="flex justify-end gap-1 sm:gap-2">
-                    {userRole !== "billing_executive" && (
-                      <>
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/dashboard/clients/${client.id}/edit`}>
-                            <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setClientToDelete(client.id);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-                        </Button>
-                      </>
-                    )}
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/dashboard/clients/${client.id}/edit`}>
+                        <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setClientToDelete(client.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>

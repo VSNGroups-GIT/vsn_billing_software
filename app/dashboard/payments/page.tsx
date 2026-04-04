@@ -31,6 +31,10 @@ export default async function PaymentsPage() {
     redirect("/dashboard/gst-filings")
   }
 
+  if (userRole === "billing_executive") {
+    redirect("/dashboard/clients")
+  }
+
   // Get all clients for selector
   const { data: clients } = await supabase
     .from("clients")
@@ -44,7 +48,7 @@ export default async function PaymentsPage() {
       `
       *,
       invoices(id, invoice_number, total_amount, amount_paid, status, client_id, clients(name)),
-      profiles!payments_created_by_fkey(full_name)
+      profiles!payments_created_by_fkey(full_name, email)
     `,
     )
     .order("payment_date", { ascending: false })

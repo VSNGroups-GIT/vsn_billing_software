@@ -134,7 +134,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
         href: "/dashboard/invoices",
         label: "Invoices",
         icon: FileText,
-        roles: ["super_admin", "admin", "billing_executive"],
+        roles: ["super_admin", "admin"],
       },
       {
         href: "/dashboard/quotations",
@@ -146,7 +146,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
         href: "/dashboard/payments",
         label: "Payments",
         icon: Banknote,
-        roles: ["super_admin", "admin", "billing_executive"],
+        roles: ["super_admin", "admin"],
       },
       {
         href: "/dashboard/reports",

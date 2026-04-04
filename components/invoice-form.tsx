@@ -224,9 +224,6 @@ export function InvoiceForm({
       initialInvoice?.due_days_type || selectedDueDaysType || "fixed_days",
     notes: initialInvoice?.notes || "",
   });
-  const [continueInvoiceSequence, setContinueInvoiceSequence] = useState(
-    !initialInvoice?.id && !!lastInvoiceNumber,
-  );
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [clientSearchValue, setClientSearchValue] = useState("");
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
@@ -800,42 +797,20 @@ export function InvoiceForm({
       let invoiceId = initialInvoice?.id;
 
       if (!invoiceId) {
-        // Use manual invoice number from form
-        const invoiceNumber = sanitizeInvoiceNumberInput(
-          formData.invoice_number,
-        );
+        // Always allocate the next number in DB to avoid RLS visibility collisions.
+        const { data: generatedInvoiceNumber, error: generateNumberError } =
+          await supabase.rpc("next_document_number", {
+            p_doc_type: "invoice",
+          });
 
-        if (!invoiceNumber) {
-          setError("Invoice number is required.");
-          setIsLoading(false);
-          return;
+        if (generateNumberError || !generatedInvoiceNumber) {
+          throw generateNumberError || new Error("Failed to generate invoice number");
         }
 
-        if (invoiceNumber !== formData.invoice_number.trim()) {
-          setError(
-            "Invoice number can only contain letters, numbers, and hyphen (-).",
-          );
-          setIsLoading(false);
-          return;
-        }
+        const invoiceNumber = String(generatedInvoiceNumber);
 
         // Generate reference number with REF. prefix
         const referenceNumber = `REF-${Date.now()}`;
-
-        // Check for duplicate invoice number
-        const { data: existingInvoice } = await supabase
-          .from("invoices")
-          .select("id")
-          .eq("invoice_number", invoiceNumber)
-          .maybeSingle();
-
-        if (existingInvoice) {
-          setError(
-            `Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`,
-          );
-          setIsLoading(false);
-          return;
-        }
 
         // Insert invoice (create mode)
         const { data: invoice, error: invoiceError } = await supabase
@@ -1079,7 +1054,6 @@ export function InvoiceForm({
               </Label>
               <Input
                 id="invoice_number"
-                required
                 value={formData.invoice_number}
                 onChange={(e) => {
                   const sanitizedValue = sanitizeInvoiceNumberInput(
@@ -1087,41 +1061,16 @@ export function InvoiceForm({
                   );
                   setFormData({ ...formData, invoice_number: sanitizedValue });
                 }}
-                placeholder="e.g., INV-001, INV-002"
-                disabled={!!initialInvoice?.id}
+                placeholder={
+                  initialInvoice?.id ? "Invoice number" : "Auto-generated on save"
+                }
+                disabled
                 pattern="[A-Za-z0-9-]+"
               />
-              {!initialInvoice?.id && (
-                <div className="flex items-center justify-between gap-3 rounded-md border p-2">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-medium">Continue sequence</p>
-                    <p className="text-xs text-muted-foreground">
-                      Auto-fill next invoice number from previous series.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={continueInvoiceSequence}
-                    onCheckedChange={(checked) => {
-                      setContinueInvoiceSequence(checked);
-                      if (checked) {
-                        const sourceValue =
-                          formData.invoice_number || lastInvoiceNumber || "";
-                        const nextNumber = getNextInvoiceNumber(sourceValue);
-                        if (nextNumber) {
-                          setFormData({
-                            ...formData,
-                            invoice_number: nextNumber,
-                          });
-                        }
-                      }
-                    }}
-                  />
-                </div>
-              )}
               <p className="text-xs text-muted-foreground">
                 {initialInvoice?.id
                   ? "Invoice number cannot be changed"
-                  : "Only letters, numbers, and hyphen (-) are allowed"}
+                  : "Invoice number is auto-generated when you save."}
               </p>
             </div>
           </div>

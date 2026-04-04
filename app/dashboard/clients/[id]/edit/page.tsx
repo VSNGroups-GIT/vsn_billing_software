@@ -20,10 +20,6 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
     .eq("id", user.id)
     .maybeSingle()
 
-  if (profile?.role === "billing_executive") {
-    redirect("/dashboard/clients")
-  }
-
   if (profile?.role === "accountant") {
     redirect("/dashboard/gst-filings")
   }

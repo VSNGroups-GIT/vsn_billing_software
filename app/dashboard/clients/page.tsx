@@ -42,14 +42,12 @@ export default async function ClientsPage() {
     <DashboardPageWrapper title="Clients">
       <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3">
-          {userRole !== "billing_executive" && (
-            <Button asChild className="w-full sm:w-auto">
-              <Link href="/dashboard/clients/new">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Client
-              </Link>
-            </Button>
-          )}
+          <Button asChild className="w-full sm:w-auto">
+            <Link href="/dashboard/clients/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Client
+            </Link>
+          </Button>
         </div>
 
         <Suspense fallback={<LoadingOverlay />}>

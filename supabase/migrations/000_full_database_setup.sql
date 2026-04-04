@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS public.products (
   tax_rate NUMERIC(5, 2) DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
   position INTEGER DEFAULT 0,
+  operator_price NUMERIC(10, 4) NOT NULL DEFAULT 0,
   operator_id UUID REFERENCES public.operators(id) ON DELETE RESTRICT,
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -185,7 +186,7 @@ CHECK (price_rule_type IN ('discount_percentage', 'discount_flat', 'multiplier',
 
 CREATE TABLE IF NOT EXISTS public.invoices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_number TEXT NOT NULL UNIQUE,
+  invoice_number TEXT NOT NULL,
   reference_number TEXT UNIQUE,
   client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE RESTRICT,
   issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -256,6 +257,43 @@ CREATE TABLE IF NOT EXISTS public.invoice_templates (
   UNIQUE (organization_id)
 );
 
+-- Operator Invoices: invoices received FROM operators
+CREATE TABLE IF NOT EXISTS public.operator_invoices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  operator_id UUID NOT NULL REFERENCES public.operators(id) ON DELETE RESTRICT,
+  invoice_number TEXT NOT NULL,
+  invoice_date DATE NOT NULL,
+  due_date DATE,
+  taxable_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  total_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  amount_paid NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'unpaid' CHECK (status IN ('unpaid', 'partially_paid', 'paid')),
+  file_url TEXT,
+  file_name TEXT,
+  notes TEXT,
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Operator Payments: payments we make to operators against their invoices
+CREATE TABLE IF NOT EXISTS public.operator_payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  operator_invoice_id UUID NOT NULL REFERENCES public.operator_invoices(id) ON DELETE RESTRICT,
+  amount NUMERIC(12, 2) NOT NULL,
+  payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  payment_method TEXT NOT NULL DEFAULT 'bank_transfer',
+  reference_number TEXT,
+  status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
+  notes TEXT,
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS public.invoice_notes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_id UUID NOT NULL REFERENCES public.invoices(id) ON DELETE CASCADE,
@@ -288,7 +326,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 
 CREATE TABLE IF NOT EXISTS public.quotations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  quotation_number TEXT NOT NULL UNIQUE,
+  quotation_number TEXT NOT NULL,
   reference_number TEXT UNIQUE,
   client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE RESTRICT,
   quotation_type TEXT NOT NULL DEFAULT 'other' CHECK (quotation_type IN ('whatsapp', 'other')),
@@ -359,6 +397,12 @@ CREATE INDEX IF NOT EXISTS idx_payments_organization_id ON public.payments(organ
 CREATE INDEX IF NOT EXISTS idx_payments_date ON public.payments(payment_date);
 
 CREATE INDEX IF NOT EXISTS idx_invoice_templates_organization_id ON public.invoice_templates(organization_id);
+
+CREATE INDEX IF NOT EXISTS idx_operator_invoices_operator_id ON public.operator_invoices(operator_id);
+CREATE INDEX IF NOT EXISTS idx_operator_invoices_organization_id ON public.operator_invoices(organization_id);
+CREATE INDEX IF NOT EXISTS idx_operator_invoices_status ON public.operator_invoices(status);
+CREATE INDEX IF NOT EXISTS idx_operator_payments_invoice_id ON public.operator_payments(operator_invoice_id);
+CREATE INDEX IF NOT EXISTS idx_operator_payments_organization_id ON public.operator_payments(organization_id);
 
 CREATE INDEX IF NOT EXISTS idx_invoice_notes_invoice_id ON public.invoice_notes(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_notes_created_at ON public.invoice_notes(created_at DESC);
@@ -484,6 +528,40 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION public.prevent_operator_invoice_edit_after_payment()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.operator_payments op
+    WHERE op.operator_invoice_id = NEW.id
+  ) THEN
+    IF NEW.operator_id IS DISTINCT FROM OLD.operator_id
+      OR NEW.invoice_number IS DISTINCT FROM OLD.invoice_number
+      OR NEW.invoice_date IS DISTINCT FROM OLD.invoice_date
+      OR NEW.due_date IS DISTINCT FROM OLD.due_date
+      OR NEW.taxable_amount IS DISTINCT FROM OLD.taxable_amount
+      OR NEW.tax_amount IS DISTINCT FROM OLD.tax_amount
+      OR NEW.total_amount IS DISTINCT FROM OLD.total_amount
+      OR NEW.file_url IS DISTINCT FROM OLD.file_url
+      OR NEW.file_name IS DISTINCT FROM OLD.file_name
+      OR NEW.notes IS DISTINCT FROM OLD.notes
+      OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
+      OR NEW.created_by IS DISTINCT FROM OLD.created_by THEN
+      RAISE EXCEPTION 'Invoice cannot be edited after payment is recorded';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS prevent_operator_invoice_edit_after_payment ON public.operator_invoices;
+CREATE TRIGGER prevent_operator_invoice_edit_after_payment
+  BEFORE UPDATE ON public.operator_invoices
+  FOR EACH ROW
+  EXECUTE FUNCTION public.prevent_operator_invoice_edit_after_payment();
+
 CREATE OR REPLACE FUNCTION public.notify_users_on_payment_note()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -597,6 +675,16 @@ CREATE TRIGGER update_invoice_templates_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_operator_invoices_updated_at ON public.operator_invoices;
+CREATE TRIGGER update_operator_invoices_updated_at
+  BEFORE UPDATE ON public.operator_invoices
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_operator_payments_updated_at ON public.operator_payments;
+CREATE TRIGGER update_operator_payments_updated_at
+  BEFORE UPDATE ON public.operator_payments
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 DROP TRIGGER IF EXISTS update_invoice_notes_updated_at ON public.invoice_notes;
 CREATE TRIGGER update_invoice_notes_updated_at
   BEFORE UPDATE ON public.invoice_notes
@@ -647,6 +735,8 @@ ALTER TABLE public.payment_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quotation_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.operator_invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.operator_payments ENABLE ROW LEVEL SECURITY;
 
 -- Organizations
 DROP POLICY IF EXISTS "Users can view their own organization" ON public.organizations;
@@ -697,10 +787,18 @@ CREATE POLICY "Users can update clients in their organization"
   ON public.clients FOR UPDATE
   USING (organization_id = public.get_user_organization(auth.uid()));
 
-DROP POLICY IF EXISTS "Super Admins can delete clients" ON public.clients;
-CREATE POLICY "Super Admins can delete clients"
+DROP POLICY IF EXISTS "Privileged users can delete clients" ON public.clients;
+CREATE POLICY "Privileged users can delete clients"
   ON public.clients FOR DELETE
-  USING (public.is_admin(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'billing_executive')
+        AND p.is_active = true
+    )
+  );
 
 -- Operators
 DROP POLICY IF EXISTS "Users can view operators in their organization" ON public.operators;
@@ -793,26 +891,81 @@ CREATE POLICY "Users can view pricing in their organization"
   ON public.client_product_pricing FOR SELECT
   USING (organization_id = public.get_user_organization(auth.uid()));
 
-DROP POLICY IF EXISTS "Super Admins can create pricing rules" ON public.client_product_pricing;
-CREATE POLICY "Super Admins can create pricing rules"
+DROP POLICY IF EXISTS "Privileged users can create pricing rules" ON public.client_product_pricing;
+CREATE POLICY "Privileged users can create pricing rules"
   ON public.client_product_pricing FOR INSERT
-  WITH CHECK (organization_id = public.get_user_organization(auth.uid()) AND public.is_admin(auth.uid()));
+  WITH CHECK (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'billing_executive')
+        AND p.is_active = true
+    )
+  );
 
-DROP POLICY IF EXISTS "Super Admins can update pricing rules" ON public.client_product_pricing;
-CREATE POLICY "Super Admins can update pricing rules"
+DROP POLICY IF EXISTS "Privileged users can update pricing rules" ON public.client_product_pricing;
+CREATE POLICY "Privileged users can update pricing rules"
   ON public.client_product_pricing FOR UPDATE
-  USING (organization_id = public.get_user_organization(auth.uid()) AND public.is_admin(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'billing_executive')
+        AND p.is_active = true
+    )
+  )
+  WITH CHECK (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'billing_executive')
+        AND p.is_active = true
+    )
+  );
 
-DROP POLICY IF EXISTS "Super Admins can delete pricing rules" ON public.client_product_pricing;
-CREATE POLICY "Super Admins can delete pricing rules"
+DROP POLICY IF EXISTS "Privileged users can delete pricing rules" ON public.client_product_pricing;
+CREATE POLICY "Privileged users can delete pricing rules"
   ON public.client_product_pricing FOR DELETE
-  USING (organization_id = public.get_user_organization(auth.uid()) AND public.is_admin(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'billing_executive')
+        AND p.is_active = true
+    )
+  );
 
--- Invoices
+-- Invoices (with creator-role visibility)
 DROP POLICY IF EXISTS "Users can view invoices in their organization" ON public.invoices;
 CREATE POLICY "Users can view invoices in their organization"
   ON public.invoices FOR SELECT
-  USING (organization_id = public.get_user_organization(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR viewer.role = 'accountant'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = invoices.created_by
+                AND creator.organization_id = invoices.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can create invoices in their organization" ON public.invoices;
 CREATE POLICY "Users can create invoices in their organization"
@@ -822,44 +975,250 @@ CREATE POLICY "Users can create invoices in their organization"
 DROP POLICY IF EXISTS "Users can update invoices in their organization" ON public.invoices;
 CREATE POLICY "Users can update invoices in their organization"
   ON public.invoices FOR UPDATE
-  USING (organization_id = public.get_user_organization(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = invoices.created_by
+                AND creator.organization_id = invoices.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  )
+  WITH CHECK (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = invoices.created_by
+                AND creator.organization_id = invoices.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
+DROP POLICY IF EXISTS "Privileged users can delete invoices" ON public.invoices;
 DROP POLICY IF EXISTS "Super Admins can delete invoices" ON public.invoices;
-CREATE POLICY "Super Admins can delete invoices"
+CREATE POLICY "Privileged users can delete invoices"
   ON public.invoices FOR DELETE
-  USING (public.is_admin(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = invoices.created_by
+                AND creator.organization_id = invoices.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
--- Invoice items
+-- Invoice items (with creator-role visibility)
 DROP POLICY IF EXISTS "Authenticated users can view invoice items" ON public.invoice_items;
 CREATE POLICY "Authenticated users can view invoice items"
   ON public.invoice_items FOR SELECT
-  USING (auth.uid() IS NOT NULL);
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.invoices i
+      JOIN public.profiles viewer ON viewer.id = auth.uid()
+      LEFT JOIN public.profiles creator ON creator.id = i.created_by
+      WHERE i.id = invoice_items.invoice_id
+        AND i.organization_id = public.get_user_organization(auth.uid())
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR viewer.role = 'accountant'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND creator.role IN ('admin', 'billing_executive')
+          )
+        )
+    )
+  );
 
+DROP POLICY IF EXISTS "Authorized users can manage invoice items" ON public.invoice_items;
 DROP POLICY IF EXISTS "Authenticated users can manage invoice items" ON public.invoice_items;
-CREATE POLICY "Authenticated users can manage invoice items"
+CREATE POLICY "Authorized users can manage invoice items"
   ON public.invoice_items FOR ALL
-  USING (auth.uid() IS NOT NULL);
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.invoices i
+      JOIN public.profiles viewer ON viewer.id = auth.uid()
+      LEFT JOIN public.profiles creator ON creator.id = i.created_by
+      WHERE i.id = invoice_items.invoice_id
+        AND i.organization_id = public.get_user_organization(auth.uid())
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND creator.role IN ('admin', 'billing_executive')
+          )
+        )
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.invoices i
+      JOIN public.profiles viewer ON viewer.id = auth.uid()
+      LEFT JOIN public.profiles creator ON creator.id = i.created_by
+      WHERE i.id = invoice_items.invoice_id
+        AND i.organization_id = public.get_user_organization(auth.uid())
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND creator.role IN ('admin', 'billing_executive')
+          )
+        )
+    )
+  );
 
--- Payments
+-- Payments (with creator-role visibility)
 DROP POLICY IF EXISTS "Users can view payments in their organization" ON public.payments;
 CREATE POLICY "Users can view payments in their organization"
   ON public.payments FOR SELECT
-  USING (organization_id = public.get_user_organization(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = payments.created_by
+                AND creator.organization_id = payments.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can create payments in their organization" ON public.payments;
 CREATE POLICY "Users can create payments in their organization"
   ON public.payments FOR INSERT
   WITH CHECK (organization_id = public.get_user_organization(auth.uid()));
 
+DROP POLICY IF EXISTS "Privileged users can update payments" ON public.payments;
 DROP POLICY IF EXISTS "Super Admins can update payments" ON public.payments;
-CREATE POLICY "Super Admins can update payments"
+CREATE POLICY "Privileged users can update payments"
   ON public.payments FOR UPDATE
-  USING (public.is_admin(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = payments.created_by
+                AND creator.organization_id = payments.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  )
+  WITH CHECK (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = payments.created_by
+                AND creator.organization_id = payments.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
+DROP POLICY IF EXISTS "Privileged users can delete payments" ON public.payments;
 DROP POLICY IF EXISTS "Super Admins can delete payments" ON public.payments;
-CREATE POLICY "Super Admins can delete payments"
+CREATE POLICY "Privileged users can delete payments"
   ON public.payments FOR DELETE
-  USING (public.is_admin(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = payments.created_by
+                AND creator.organization_id = payments.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
 -- Invoice templates
 DROP POLICY IF EXISTS "Users can view their organization template" ON public.invoice_templates;
@@ -973,39 +1332,290 @@ CREATE POLICY "Users can delete their own notifications"
   ON public.notifications FOR DELETE
   USING (user_id = auth.uid());
 
--- Quotations
+-- Quotations (with creator-role visibility)
 DROP POLICY IF EXISTS "Users can view quotations in their organization" ON public.quotations;
 CREATE POLICY "Users can view quotations in their organization"
   ON public.quotations FOR SELECT
-  USING (organization_id = public.get_user_organization(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = quotations.created_by
+                AND creator.organization_id = quotations.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can create quotations in their organization" ON public.quotations;
 CREATE POLICY "Users can create quotations in their organization"
   ON public.quotations FOR INSERT
-  WITH CHECK (organization_id = public.get_user_organization(auth.uid()));
+  WITH CHECK (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'billing_executive')
+        AND p.is_active = true
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can update quotations in their organization" ON public.quotations;
 CREATE POLICY "Users can update quotations in their organization"
   ON public.quotations FOR UPDATE
-  USING (organization_id = public.get_user_organization(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = quotations.created_by
+                AND creator.organization_id = quotations.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  )
+  WITH CHECK (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = quotations.created_by
+                AND creator.organization_id = quotations.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
+DROP POLICY IF EXISTS "Privileged users can delete quotations" ON public.quotations;
 DROP POLICY IF EXISTS "Super Admins can delete quotations" ON public.quotations;
-CREATE POLICY "Super Admins can delete quotations"
+CREATE POLICY "Privileged users can delete quotations"
   ON public.quotations FOR DELETE
-  USING (public.is_admin(auth.uid()));
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles viewer
+      WHERE viewer.id = auth.uid()
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND EXISTS (
+              SELECT 1
+              FROM public.profiles creator
+              WHERE creator.id = quotations.created_by
+                AND creator.organization_id = quotations.organization_id
+                AND creator.role IN ('admin', 'billing_executive')
+            )
+          )
+        )
+    )
+  );
 
 DROP POLICY IF EXISTS "Authenticated users can view quotation items" ON public.quotation_items;
 CREATE POLICY "Authenticated users can view quotation items"
   ON public.quotation_items FOR SELECT
-  USING (auth.uid() IS NOT NULL);
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.quotations q
+      JOIN public.profiles viewer ON viewer.id = auth.uid()
+      LEFT JOIN public.profiles creator ON creator.id = q.created_by
+      WHERE q.id = quotation_items.quotation_id
+        AND q.organization_id = public.get_user_organization(auth.uid())
+        AND viewer.is_active = true
+        AND (
+          viewer.role = 'super_admin'
+          OR (
+            viewer.role IN ('admin', 'billing_executive')
+            AND creator.role IN ('admin', 'billing_executive')
+          )
+        )
+    )
+  );
 
+DROP POLICY IF EXISTS "Authorized users can manage quotation items" ON public.quotation_items;
 DROP POLICY IF EXISTS "Authenticated users can manage quotation items" ON public.quotation_items;
-CREATE POLICY "Authenticated users can manage quotation items"
+CREATE POLICY "Authorized users can manage quotation items"
   ON public.quotation_items FOR ALL
-  USING (auth.uid() IS NOT NULL);
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.quotations q
+      JOIN public.profiles p ON p.id = auth.uid()
+      WHERE q.id = quotation_items.quotation_id
+        AND q.organization_id = public.get_user_organization(auth.uid())
+        AND p.role IN ('super_admin', 'admin', 'billing_executive')
+        AND p.is_active = true
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.quotations q
+      JOIN public.profiles p ON p.id = auth.uid()
+      WHERE q.id = quotation_items.quotation_id
+        AND q.organization_id = public.get_user_organization(auth.uid())
+        AND p.role IN ('super_admin', 'admin', 'billing_executive')
+        AND p.is_active = true
+    )
+  );
+
+-- Operator invoices
+DROP POLICY IF EXISTS "Users can manage operator invoices in their org" ON public.operator_invoices;
+CREATE POLICY "Users can manage operator invoices in their org"
+  ON public.operator_invoices FOR ALL
+  USING (organization_id IN (
+    SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+  ));
+
+-- Operator payments
+DROP POLICY IF EXISTS "Users can manage operator payments in their org" ON public.operator_payments;
+CREATE POLICY "Users can manage operator payments in their org"
+  ON public.operator_payments FOR ALL
+  USING (organization_id IN (
+    SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+  ));
 
 -- --------------------------------------------------------------------------
--- 8) Comments
+-- 8) Document number generation (collision-proof, org-scoped)
+-- --------------------------------------------------------------------------
+ALTER TABLE public.invoices
+  DROP CONSTRAINT IF EXISTS invoices_invoice_number_key;
+
+ALTER TABLE public.invoices
+  ADD CONSTRAINT invoices_org_invoice_number_unique
+  UNIQUE (organization_id, invoice_number);
+
+ALTER TABLE public.quotations
+  DROP CONSTRAINT IF EXISTS quotations_quotation_number_key;
+
+ALTER TABLE public.quotations
+  ADD CONSTRAINT quotations_org_quotation_number_unique
+  UNIQUE (organization_id, quotation_number);
+
+CREATE TABLE IF NOT EXISTS public.document_number_sequences (
+  organization_id UUID PRIMARY KEY REFERENCES public.organizations(id) ON DELETE CASCADE,
+  next_invoice_number BIGINT NOT NULL DEFAULT 1,
+  next_quotation_number BIGINT NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.document_number_sequences ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON public.document_number_sequences FROM PUBLIC;
+REVOKE ALL ON public.document_number_sequences FROM anon;
+REVOKE ALL ON public.document_number_sequences FROM authenticated;
+
+CREATE OR REPLACE FUNCTION public.next_document_number(p_doc_type TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_org_id UUID;
+  v_next BIGINT;
+  v_invoice_start BIGINT;
+  v_quotation_start BIGINT;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  v_org_id := public.get_user_organization(auth.uid());
+  IF v_org_id IS NULL THEN
+    RAISE EXCEPTION 'User organization not found';
+  END IF;
+
+  IF p_doc_type NOT IN ('invoice', 'quotation') THEN
+    RAISE EXCEPTION 'Unsupported document type: %', p_doc_type;
+  END IF;
+
+  SELECT COALESCE(MAX((regexp_match(i.invoice_number, '([0-9]+)$'))[1]::BIGINT), 0) + 1
+    INTO v_invoice_start
+  FROM public.invoices i
+  WHERE i.organization_id = v_org_id;
+
+  SELECT COALESCE(MAX((regexp_match(q.quotation_number, '([0-9]+)$'))[1]::BIGINT), 0) + 1
+    INTO v_quotation_start
+  FROM public.quotations q
+  WHERE q.organization_id = v_org_id;
+
+  INSERT INTO public.document_number_sequences (
+    organization_id,
+    next_invoice_number,
+    next_quotation_number
+  )
+  VALUES (
+    v_org_id,
+    v_invoice_start,
+    v_quotation_start
+  )
+  ON CONFLICT (organization_id) DO NOTHING;
+
+  IF p_doc_type = 'invoice' THEN
+    UPDATE public.document_number_sequences
+    SET
+      next_invoice_number = next_invoice_number + 1,
+      updated_at = NOW()
+    WHERE organization_id = v_org_id
+    RETURNING next_invoice_number - 1 INTO v_next;
+
+    RETURN 'INV-' || LPAD(v_next::TEXT, 4, '0');
+  END IF;
+
+  UPDATE public.document_number_sequences
+  SET
+    next_quotation_number = next_quotation_number + 1,
+    updated_at = NOW()
+  WHERE organization_id = v_org_id
+  RETURNING next_quotation_number - 1 INTO v_next;
+
+  RETURN 'Q-' || LPAD(v_next::TEXT, 4, '0');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.next_document_number(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.next_document_number(TEXT) TO authenticated;
+
+-- --------------------------------------------------------------------------
+-- 9) Comments
 -- --------------------------------------------------------------------------
 COMMENT ON TABLE public.client_product_pricing IS 'Stores client-specific pricing rules for products';
 COMMENT ON COLUMN public.client_product_pricing.price_rule_type IS 'Rule type: discount_percentage, discount_flat, multiplier, flat_addition, conditional_discount';

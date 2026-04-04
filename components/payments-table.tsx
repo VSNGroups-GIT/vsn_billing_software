@@ -56,6 +56,10 @@ interface Payment {
       name: string;
     };
   };
+  profiles?: {
+    full_name: string | null;
+    email: string | null;
+  } | null;
 }
 
 interface PaymentsTableProps {
@@ -80,6 +84,7 @@ export function PaymentsTable({
   toDate = "",
   userRole,
 }: PaymentsTableProps) {
+  const showCreatedBy = userRole === "super_admin";
   const router = useRouter();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -98,6 +103,7 @@ export function PaymentsTable({
     invoice: "",
     client: "",
     method: "",
+    creator: "",
   });
 
   // Date range filter (by payment_date)
@@ -120,6 +126,7 @@ export function PaymentsTable({
     const invoiceQuery = filters.invoice.trim().toLowerCase();
     const clientQuery = filters.client.trim().toLowerCase();
     const methodQuery = filters.method.trim().toLowerCase();
+    const creatorQuery = filters.creator.trim().toLowerCase();
 
     // Apply filters
     if (invoiceQuery) {
@@ -140,6 +147,13 @@ export function PaymentsTable({
       filtered = filtered.filter((p) =>
         p.payment_method.toLowerCase().includes(methodQuery),
       );
+    }
+    if (creatorQuery) {
+      filtered = filtered.filter((p) => {
+        const creatorName = p.profiles?.full_name?.toLowerCase() || "";
+        const creatorEmail = p.profiles?.email?.toLowerCase() || "";
+        return creatorName.includes(creatorQuery) || creatorEmail.includes(creatorQuery);
+      });
     }
 
     // Apply sorting
@@ -172,6 +186,10 @@ export function PaymentsTable({
           case "status":
             aVal = a.status;
             bVal = b.status;
+            break;
+          case "creator":
+            aVal = a.profiles?.full_name || a.profiles?.email || "";
+            bVal = b.profiles?.full_name || b.profiles?.email || "";
             break;
           default:
             return 0;
@@ -376,6 +394,11 @@ export function PaymentsTable({
         formatter: (status) =>
           statusConfig[status as keyof typeof statusConfig]?.label || status,
       },
+      {
+        key: "profiles",
+        label: "Created By",
+        formatter: (profile) => profile?.full_name || profile?.email || "-",
+      },
     ];
 
     await exportToCSVAsync(processedPayments, columns, `payments-${getTimestamp()}.csv`);
@@ -400,6 +423,8 @@ export function PaymentsTable({
       method_label: p.payment_method.replace(/_/g, " "),
       status_label:
         statusConfig[p.status as keyof typeof statusConfig]?.label || p.status,
+      created_by_label:
+        p.profiles?.full_name || p.profiles?.email || "-",
     }));
 
     const pdfColumns: ExportColumn[] = [
@@ -410,6 +435,7 @@ export function PaymentsTable({
       { key: "method_label", label: "Method" },
       { key: "reference_number", label: "Reference" },
       { key: "status_label", label: "Status" },
+      { key: "created_by_label", label: "Created By" },
     ];
 
     const rangeLabel =
@@ -516,6 +542,15 @@ export function PaymentsTable({
                     Status
                     <SortIcon column="status" />
                   </TableHead>
+                  {showCreatedBy && (
+                    <TableHead
+                      className="hidden xl:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                      onClick={() => handleSort("creator")}
+                    >
+                      Created By
+                      <SortIcon column="creator" />
+                    </TableHead>
+                  )}
                   <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">
                     Actions
                   </TableHead>
@@ -555,6 +590,18 @@ export function PaymentsTable({
                   </TableHead>
                   <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
                   <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+                  {showCreatedBy && (
+                    <TableHead className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                      <Input
+                        placeholder="Filter..."
+                        value={filters.creator}
+                        onChange={(e) =>
+                          handleFilterChange("creator", e.target.value)
+                        }
+                        className="h-7 text-xs"
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -607,6 +654,18 @@ export function PaymentsTable({
                           {config.label}
                         </Badge>
                       </TableCell>
+                      {showCreatedBy && (
+                        <TableCell className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium">
+                              {payment.profiles?.full_name || "Unknown User"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {payment.profiles?.email || "-"}
+                            </span>
+                          </div>
+                        </TableCell>
+                      )}
                       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                         <div className="flex justify-end gap-1 sm:gap-2">
                           <Button variant="ghost" size="sm" asChild>
