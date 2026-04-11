@@ -14,6 +14,7 @@ interface InvoiceTemplate {
   id?: string
   template_type?: TemplateType
   company_name: string
+  company_tagline?: string
   company_address: string
   company_phone: string
   company_email: string
@@ -102,6 +103,7 @@ export function InvoiceTemplateForm({
   description,
   enableWhatsappTable = false,
 }: InvoiceTemplateFormProps) {
+  const isEditingExistingTemplate = Boolean(existingTemplate)
   const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
@@ -110,20 +112,25 @@ export function InvoiceTemplateForm({
     existingTemplate?.company_logo_file || existingTemplate?.company_logo_url || DEFAULT_LOGO_URL
   )
   const [stampPreview, setStampPreview] = useState<string | null>(
-    existingTemplate?.company_stamp_file || existingTemplate?.company_stamp_url || DEFAULT_STAMP_URL
+    existingTemplate?.company_stamp_file || existingTemplate?.company_stamp_url || (isEditingExistingTemplate ? null : DEFAULT_STAMP_URL)
   )
 
   const [formData, setFormData] = useState<InvoiceTemplate>({
     template_type: templateType,
     company_name: existingTemplate?.company_name || "",
+    company_tagline: existingTemplate?.company_tagline || "",
     company_address: existingTemplate?.company_address || "",
     company_phone: existingTemplate?.company_phone || "",
     company_email: existingTemplate?.company_email || "",
     company_logo_url: existingTemplate?.company_logo_url || (existingTemplate?.company_logo_file ? "" : DEFAULT_LOGO_URL),
     company_logo_file: existingTemplate?.company_logo_file || null,
-    company_stamp_url: existingTemplate?.company_stamp_url || (existingTemplate?.company_stamp_file ? "" : DEFAULT_STAMP_URL),
+    company_stamp_url: isEditingExistingTemplate
+      ? (existingTemplate?.company_stamp_url ?? "")
+      : (existingTemplate?.company_stamp_file ? "" : DEFAULT_STAMP_URL),
     company_stamp_file: existingTemplate?.company_stamp_file || null,
-    signatory_label: existingTemplate?.signatory_label || DEFAULT_SIGNATORY_LABEL,
+    signatory_label: isEditingExistingTemplate
+      ? (existingTemplate?.signatory_label ?? "")
+      : DEFAULT_SIGNATORY_LABEL,
     tax_label:
       existingTemplate?.tax_label === "GST"
         ? "IGST"
@@ -372,6 +379,18 @@ export function InvoiceTemplateForm({
               rows={2}
             />
           </div>
+
+          {templateType !== "invoice" && (
+            <div className="space-y-2">
+              <Label htmlFor="company_tagline">Company Tagline</Label>
+              <Input
+                id="company_tagline"
+                value={formData.company_tagline || ""}
+                onChange={(e) => setFormData({ ...formData, company_tagline: e.target.value })}
+                placeholder="Your trusted communication partner"
+              />
+            </div>
+          )}
 
           <div className="space-y-3">
             <Label>Company Logo</Label>

@@ -52,6 +52,7 @@ export default async function InvoiceDetailPage({
 
   let template = null;
   let userRole = null;
+  let organizationTaxId: string | null = null;
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -62,6 +63,14 @@ export default async function InvoiceDetailPage({
     userRole = profile?.role;
 
     if (profile?.organization_id) {
+      const { data: organization } = await supabase
+        .from("organizations")
+        .select("tax_id")
+        .eq("id", profile.organization_id)
+        .maybeSingle();
+
+      organizationTaxId = organization?.tax_id || null;
+
       const { data: templateData } = await supabase
         .from("invoice_templates")
         .select("*")
@@ -104,7 +113,7 @@ export default async function InvoiceDetailPage({
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
-      <PrintableInvoice invoice={invoice} template={template} />
+      <PrintableInvoice invoice={invoice} template={template} organizationTaxId={organizationTaxId} />
       <Notes
         notes={invoiceNotes || []}
         referenceId={id}

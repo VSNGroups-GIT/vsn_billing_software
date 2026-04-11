@@ -44,7 +44,18 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   }
 
   let template = null;
+  let organizationTaxId: string | null = null;
+  let organizationTagline: string | null = null;
   if (quotation.organization_id) {
+    const { data: organization } = await supabase
+      .from("organizations")
+      .select("tax_id, tagline")
+      .eq("id", quotation.organization_id)
+      .maybeSingle();
+
+    organizationTaxId = organization?.tax_id || null;
+    organizationTagline = organization?.tagline || null;
+
     const templateType = quotation.quotation_type === "whatsapp" ? "quotation_whatsapp" : "quotation_other";
     const { data: templateData } = await supabase
       .from("invoice_templates")
@@ -94,7 +105,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         </div>
       </div>
 
-      <PrintableQuotation quotation={quotation} template={template} />
+      <PrintableQuotation
+        quotation={quotation}
+        template={template}
+        organizationTaxId={organizationTaxId}
+        organizationTagline={organizationTagline}
+      />
     </div>
   );
 }

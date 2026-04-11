@@ -18,6 +18,7 @@ interface Organization {
   phone?: string
   email?: string
   tax_id?: string
+  tagline?: string
 }
 
 export function SettingsForm({ organization }: { organization: Organization | null }) {
@@ -30,6 +31,7 @@ export function SettingsForm({ organization }: { organization: Organization | nu
     phone: organization?.phone || "",
     email: organization?.email || "",
     tax_id: organization?.tax_id || "",
+    tagline: organization?.tagline || "",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,6 +102,16 @@ export function SettingsForm({ organization }: { organization: Organization | nu
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="tagline">Tagline</Label>
+          <Input
+            id="tagline"
+            value={formData.tagline}
+            onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
+            placeholder="Trusted partner for messaging and billing solutions"
           />
         </div>
 

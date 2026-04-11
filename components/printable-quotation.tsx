@@ -8,6 +8,7 @@ import { Printer } from "lucide-react";
 
 interface InvoiceTemplate {
   company_name: string;
+  company_tagline?: string | null;
   company_address: string;
   company_phone: string;
   company_email: string;
@@ -32,15 +33,18 @@ interface WhatsAppTemplateRow {
 interface PrintableQuotationProps {
   quotation: any;
   template?: InvoiceTemplate | null;
+  organizationTaxId?: string | null;
+  organizationTagline?: string | null;
 }
 
-export function PrintableQuotation({ quotation, template }: PrintableQuotationProps) {
+export function PrintableQuotation({ quotation, template, organizationTaxId, organizationTagline }: PrintableQuotationProps) {
   const [isPrinting, setIsPrinting] = useState(false);
   const router = useRouter();
   const printAreaRef = useRef<HTMLDivElement | null>(null);
 
   const defaultTemplate: InvoiceTemplate = {
     company_name: "Your Company Name",
+    company_tagline: "Your trusted communication partner",
     company_address: "123 Business Street, City, State 12345",
     company_phone: "+91 00000 00000",
     company_email: "info@company.com",
@@ -88,10 +92,10 @@ export function PrintableQuotation({ quotation, template }: PrintableQuotationPr
   const logoSrc = activeTemplate.company_logo_file || activeTemplate.company_logo_url;
   const stampSrc =
     activeTemplate.company_stamp_file ||
-    activeTemplate.company_stamp_url ||
-    "/hyd_stamp_%26_Sign.png";
-  const signatoryLabel =
-    (activeTemplate.signatory_label || "").trim() || "Authorized Signatory";
+    activeTemplate.company_stamp_url;
+  const signatoryLabel = (activeTemplate.signatory_label || "").trim();
+  const shouldShowSignatureBlock = Boolean(stampSrc || signatoryLabel);
+  const companyTagline = (activeTemplate.company_tagline || organizationTagline || "").trim();
 
   const formatCurrency = (value: string | number) =>
     `₹${Number(value).toLocaleString("en-IN", {
@@ -247,12 +251,16 @@ export function PrintableQuotation({ quotation, template }: PrintableQuotationPr
                   <h1 className="mt-1 text-3xl font-extrabold uppercase tracking-[0.14em] text-slate-900 print:text-[28px]">
                     {activeTemplate.company_name}
                   </h1>
-                  <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-slate-700 print:mt-1.5 print:text-[11px]">
-                    {activeTemplate.company_address}
-                  </p>
-                  <p className="mt-1.5 text-xs text-slate-600 print:mt-1 print:text-[10px]">
-                    {activeTemplate.company_phone} | {activeTemplate.company_email}
-                  </p>
+                  {companyTagline && (
+                    <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-slate-700 print:mt-1.5 print:text-[11px]">
+                      {companyTagline}
+                    </p>
+                  )}
+                  {organizationTaxId && (
+                    <p className="mt-1 text-xs font-semibold text-slate-700 print:text-[10px]">
+                      GST/Tax ID: {organizationTaxId}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-col items-end gap-3">
@@ -415,18 +423,24 @@ export function PrintableQuotation({ quotation, template }: PrintableQuotationPr
                 Thank you for your business
               </div>
 
-              <div className="flex justify-end print-no-break">
-                <div className="text-center min-w-[170px]">
-                  <img
-                    src={stampSrc}
-                    alt="Authorized Stamp and Signature"
-                    className="ml-auto h-[86px] w-[165px] object-contain print:h-[74px] print:w-[145px]"
-                  />
-                  <p className="mt-1 text-xs uppercase tracking-wide text-slate-700 print:text-[10px]">
-                    {signatoryLabel}
-                  </p>
+              {shouldShowSignatureBlock && (
+                <div className="flex justify-end print-no-break">
+                  <div className="text-center min-w-[170px]">
+                    {stampSrc && (
+                      <img
+                        src={stampSrc}
+                        alt="Authorized Stamp and Signature"
+                        className="ml-auto h-[86px] w-[165px] object-contain print:h-[74px] print:w-[145px]"
+                      />
+                    )}
+                    {signatoryLabel && (
+                      <p className="mt-1 text-xs uppercase tracking-wide text-slate-700 print:text-[10px]">
+                        {signatoryLabel}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="border-t border-cyan-700/50 pt-1.5 text-center text-[10px] leading-relaxed text-slate-600 print:pt-1 print:text-[9px]">
                 <p>

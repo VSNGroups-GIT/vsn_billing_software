@@ -63,9 +63,10 @@ interface Invoice {
 interface PrintableInvoiceProps {
   invoice: Invoice;
   template?: InvoiceTemplate;
+  organizationTaxId?: string | null;
 }
 
-export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
+export function PrintableInvoice({ invoice, template, organizationTaxId }: PrintableInvoiceProps) {
   const [isPrinting, setIsPrinting] = useState(false);
   const router = useRouter();
   const printAreaRef = useRef<HTMLDivElement | null>(null);
@@ -101,10 +102,9 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
     activeTemplate.company_logo_file || activeTemplate.company_logo_url;
   const stampSrc =
     activeTemplate.company_stamp_file ||
-    activeTemplate.company_stamp_url ||
-    "/hyd_stamp_%26_Sign.png";
-  const signatoryLabel =
-    (activeTemplate.signatory_label || "").trim() || "Authorized Signatory";
+    activeTemplate.company_stamp_url;
+  const signatoryLabel = (activeTemplate.signatory_label || "").trim();
+  const shouldShowSignatureBlock = Boolean(stampSrc || signatoryLabel);
   const issueDateFormatted = new Date(invoice.issue_date).toLocaleDateString(
     "en-IN",
     {
@@ -284,6 +284,11 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                 <p className="text-sm text-slate-700 mt-2 font-medium max-w-xl leading-relaxed">
                   {activeTemplate.company_address}
                 </p>
+                {organizationTaxId && (
+                  <p className="text-xs text-slate-700 mt-1 font-semibold">
+                    GST/Tax ID: {organizationTaxId}
+                  </p>
+                )}
                 <p className="text-xs text-slate-600 mt-1.5">
                   {activeTemplate.company_phone} | {activeTemplate.company_email}
                 </p>
@@ -504,16 +509,22 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                 </p>
               </div>
 
-              <div className="text-center min-w-[170px] -mr-1 print:mr-0">
-                <img
-                  src={stampSrc}
-                  alt="Authorized Stamp and Signature"
-                  className="h-[86px] w-[165px] object-contain ml-auto"
-                />
-                <p className="text-xs uppercase tracking-wide mt-1 text-slate-700">
-                  {signatoryLabel}
-                </p>
-              </div>
+              {shouldShowSignatureBlock && (
+                <div className="text-center min-w-[170px] -mr-1 print:mr-0">
+                  {stampSrc && (
+                    <img
+                      src={stampSrc}
+                      alt="Authorized Stamp and Signature"
+                      className="h-[86px] w-[165px] object-contain ml-auto"
+                    />
+                  )}
+                  {signatoryLabel && (
+                    <p className="text-xs uppercase tracking-wide mt-1 text-slate-700">
+                      {signatoryLabel}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
