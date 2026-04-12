@@ -232,7 +232,6 @@ export function PaymentsTable({
         .maybeSingle();
 
       if (fetchError) {
-        console.error("Fetch payment error:", fetchError);
         toast({
           variant: "destructive",
           title: "Error",
@@ -270,7 +269,6 @@ export function PaymentsTable({
         .maybeSingle();
 
       if (invoiceFetchError) {
-        console.error("Fetch invoice error:", invoiceFetchError);
         toast({
           variant: "destructive",
           title: "Error",
@@ -312,7 +310,6 @@ export function PaymentsTable({
         .eq("id", id);
 
       if (deleteError) {
-        console.error("Delete payment error:", deleteError);
         toast({
           variant: "destructive",
           title: "Error",
@@ -329,7 +326,6 @@ export function PaymentsTable({
         .eq("id", payment.invoice_id);
 
       if (updateError) {
-        console.error("Update invoice error:", updateError);
         toast({
           variant: "destructive",
           title: "Error",
@@ -348,7 +344,6 @@ export function PaymentsTable({
       });
       router.refresh();
     } catch (error) {
-      console.error("Unexpected error during payment deletion:", error);
       toast({
         variant: "destructive",
         title: "Error",

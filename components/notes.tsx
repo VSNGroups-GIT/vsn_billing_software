@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
 import { MessageSquare, Send } from "lucide-react"
 
 interface Note {
@@ -32,8 +31,7 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
   const [newNote, setNewNote] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { toast } = useToast()
-  const router = useRouter()
-  const supabase = createClient()
+  const [supabase] = useState(() => createClient())
 
   const canAddNotes = userRole === "super_admin" || userRole === "admin"
 
@@ -52,7 +50,7 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
 
       if (fetchedNotes && fetchedNotes.length > 0) {
         // Fetch profiles for all notes
-        const createdByIds = fetchedNotes.map((note: any) => note.created_by)
+        const createdByIds = [...new Set(fetchedNotes.map((note: any) => note.created_by))]
         
         const { data: profiles } = await supabase
           .from("profiles")
@@ -105,7 +103,7 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
 
           if (updatedNotes && updatedNotes.length > 0) {
             // Fetch profiles
-            const createdByIds = updatedNotes.map((note: any) => note.created_by)
+            const createdByIds = [...new Set(updatedNotes.map((note: any) => note.created_by))]
             const { data: profiles } = await supabase
               .from("profiles")
               .select("id, full_name, role")
@@ -186,41 +184,6 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
         description: "Your note has been added successfully.",
       })
       setNewNote("")
-      // Refetch notes immediately after successful submission
-      const fetchNotes = async () => {
-        const tableName = referenceType === "invoice" ? "invoice_notes" : "payment_notes"
-        const foreignKey = referenceType === "invoice" ? "invoice_id" : "payment_id"
-
-        const { data: fetchedNotes } = await supabase
-          .from(tableName)
-          .select("id, note, created_at, created_by")
-          .eq(foreignKey, referenceId)
-          .order("created_at", { ascending: false })
-
-        if (fetchedNotes && fetchedNotes.length > 0) {
-          const createdByIds = fetchedNotes.map((note: any) => note.created_by)
-          const { data: profiles } = await supabase
-            .from("profiles")
-            .select("id, full_name, role")
-            .in("id", createdByIds)
-
-          const notesWithProfiles = fetchedNotes.map((note: any) => {
-            const profile = profiles?.find((p: any) => p.id === note.created_by)
-            return {
-              id: note.id,
-              note: note.note,
-              created_at: note.created_at,
-              profiles: profile ? {
-                full_name: profile.full_name,
-                role: profile.role
-              } : null
-            }
-          }).filter((note: any) => note.profiles !== null)
-
-          setNotes(notesWithProfiles)
-        }
-      }
-      await fetchNotes()
     }
 
     setIsSubmitting(false)

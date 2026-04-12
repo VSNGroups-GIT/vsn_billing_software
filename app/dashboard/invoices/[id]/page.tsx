@@ -1,7 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PrintableInvoice } from "@/components/printable-invoice";
 import { Notes } from "@/components/notes";
+import { DocumentShareActions } from "@/components/document-share-actions";
 
 export default async function InvoiceDetailPage({
   params,
@@ -113,6 +117,23 @@ export default async function InvoiceDetailPage({
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+      <div className="rounded-xl border bg-white p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/dashboard/invoices">
+                <ArrowLeft className="h-4 w-4 mr-1" /> Back
+              </Link>
+            </Button>
+            <h1 className="text-xl font-bold sm:text-2xl">Invoice: {invoice.invoice_number}</h1>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <DocumentShareActions documentType="invoice" documentId={invoice.id} />
+          </div>
+        </div>
+      </div>
+
       <PrintableInvoice invoice={invoice} template={template} organizationTaxId={organizationTaxId} />
       <Notes
         notes={invoiceNotes || []}

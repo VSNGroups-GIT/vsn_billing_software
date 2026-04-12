@@ -9,9 +9,10 @@ import { useToast } from "@/hooks/use-toast";
 interface ConvertQuotationButtonProps {
   quotationId: string;
   disabled?: boolean;
+  size?: "default" | "sm" | "lg" | "icon";
 }
 
-export function ConvertQuotationButton({ quotationId, disabled }: ConvertQuotationButtonProps) {
+export function ConvertQuotationButton({ quotationId, disabled, size = "default" }: ConvertQuotationButtonProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isConverting, setIsConverting] = useState(false);
@@ -33,7 +34,7 @@ export function ConvertQuotationButton({ quotationId, disabled }: ConvertQuotati
   };
 
   return (
-    <Button onClick={handleConvert} disabled={disabled || isConverting}>
+    <Button onClick={handleConvert} disabled={disabled || isConverting} size={size}>
       {isConverting ? <Spinner className="h-4 w-4 mr-2" /> : null}
       {isConverting ? "Opening..." : "Convert to Invoice"}
     </Button>

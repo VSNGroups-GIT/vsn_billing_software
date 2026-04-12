@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft } from "lucide-react";
 import { PrintableQuotation } from "@/components/printable-quotation";
 import { ConvertQuotationButton } from "@/components/convert-quotation-button";
+import { DocumentShareActions } from "@/components/document-share-actions";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-slate-100 text-slate-800" },
@@ -71,27 +72,33 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-col gap-3 rounded-lg border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/dashboard/quotations">
-              <ArrowLeft className="h-4 w-4 mr-1" /> Back
-            </Link>
-          </Button>
-          <h1 className="text-2xl font-bold">Quotation: {quotation.quotation_number}</h1>
-          <Badge className={cfg.className}>{cfg.label}</Badge>
-          {quotation.status === "converted" && (
-            <span className="text-sm font-medium text-green-700">Converted to invoice</span>
-          )}
-        </div>
+      <div className="rounded-xl border bg-white p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/dashboard/quotations">
+                  <ArrowLeft className="h-4 w-4 mr-1" /> Back
+                </Link>
+              </Button>
+              <h1 className="text-xl font-bold sm:text-2xl">Quotation: {quotation.quotation_number}</h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={cfg.className}>{cfg.label}</Badge>
+              {quotation.status === "converted" && (
+                <span className="text-sm font-medium text-green-700">Converted to invoice</span>
+              )}
+            </div>
+          </div>
 
-        <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <DocumentShareActions documentType="quotation" documentId={quotation.id} />
           {quotation.status !== "converted" ? (
             <>
               <Button asChild variant="outline" size="sm">
                 <Link href={`/dashboard/quotations/${quotation.id}/edit`}>Edit Quotation</Link>
               </Button>
-              <ConvertQuotationButton quotationId={quotation.id} />
+              <ConvertQuotationButton quotationId={quotation.id} size="sm" />
             </>
           ) : (
             quotation.converted_invoice_id && (
@@ -103,6 +110,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
             )
           )}
         </div>
+      </div>
       </div>
 
       <PrintableQuotation

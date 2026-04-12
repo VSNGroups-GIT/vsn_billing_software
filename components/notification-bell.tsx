@@ -27,7 +27,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
-  const supabase = createClient()
+  const [supabase] = useState(() => createClient())
   const DISPLAY_LIMIT = 5
   const { toast } = useToast()
 

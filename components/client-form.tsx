@@ -13,7 +13,6 @@ import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { sendClientInvitation } from "@/app/actions/send-client-invitation";
 
 interface Client {
   id: string;
@@ -194,9 +193,6 @@ export function ClientForm({ client }: ClientFormProps) {
         });
 
         if (error) throw error;
-
-        // Send invitation email to new client (non-critical)
-        await sendClientInvitation(formData.email, formData.name);
 
         toast({
           variant: "success",
