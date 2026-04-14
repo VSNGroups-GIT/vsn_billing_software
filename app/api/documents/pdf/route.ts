@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySignedDocumentPdfParams, type SharedDocumentType } from "@/lib/document-pdf-link";
+
+export const maxDuration = 60;
 
 type Row = Record<string, unknown>;
 
@@ -714,10 +716,22 @@ function buildDocumentHtml(documentType: SharedDocumentType, payload: Awaited<Re
 }
 
 async function renderPdfFromHtml(html: string) {
-  const browser = await chromium.launch({ headless: true });
+  let executablePath: string | undefined;
+  let launchArgs: string[] = [];
+  if (process.env.VERCEL) {
+    const chromiumPkg = (await import("@sparticuz/chromium")).default;
+    executablePath = await chromiumPkg.executablePath();
+    launchArgs = chromiumPkg.args;
+  }
+
+  const browser = await chromium.launch({
+    args: launchArgs,
+    executablePath,
+    headless: true,
+  });
   try {
     const page = await browser.newPage({ viewport: { width: 1240, height: 1754 } });
-    await page.setContent(html, { waitUntil: "networkidle" });
+    await page.setContent(html, { waitUntil: "domcontentloaded" });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
@@ -741,7 +755,7 @@ export async function GET(req: NextRequest) {
     const pdf = await renderPdfFromHtml(html);
     const number = String(payload.row[payload.numberField] || validation.documentId).replace(/[^a-zA-Z0-9-_]+/g, "-");
 
-    return new NextResponse(pdf, {
+    return new NextResponse(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${validation.documentType}-${number}.pdf"`,

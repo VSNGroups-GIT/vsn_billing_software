@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send-email";
 import { buildSignedDocumentPdfUrl } from "@/lib/document-pdf-link";
 
+export const maxDuration = 60;
+
 type DocumentType = "invoice" | "quotation";
 type ShareChannel = "email" | "whatsapp";
 
@@ -264,7 +266,12 @@ async function createHostedPdfLinkForWhatsapp(
 
   const sourcePdfResponse = await fetch(sourcePdfUrl, { method: "GET" });
   if (!sourcePdfResponse.ok) {
-    throw new Error(`Failed to generate PDF (${sourcePdfResponse.status})`);
+    let detail = `status ${sourcePdfResponse.status}`;
+    try {
+      const body = await sourcePdfResponse.json();
+      if (body?.error) detail = body.error;
+    } catch { /* response wasn't JSON */ }
+    throw new Error(`Failed to generate PDF: ${detail}`);
   }
 
   const pdfBytes = await sourcePdfResponse.arrayBuffer();

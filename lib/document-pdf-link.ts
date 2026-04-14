@@ -62,7 +62,7 @@ export function verifySignedDocumentPdfParams(searchParams: URLSearchParams) {
 
   return {
     isValid: true as const,
-    documentType,
+    documentType: documentType as SharedDocumentType,
     documentId,
   };
 }
