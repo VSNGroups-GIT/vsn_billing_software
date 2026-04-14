@@ -722,7 +722,7 @@ async function renderPdfFromHtml(html: string) {
     const chromiumPkg = (await import("@sparticuz/chromium")).default;
     const chromiumUrl =
       process.env.CHROMIUM_PACK_URL ||
-      "https://github.com/Sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.tar";
+      "https://github.com/Sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.x64.tar";
     executablePath = await chromiumPkg.executablePath(chromiumUrl);
     launchArgs = chromiumPkg.args;
   }
