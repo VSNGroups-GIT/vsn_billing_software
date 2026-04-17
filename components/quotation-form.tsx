@@ -667,7 +667,7 @@ export function QuotationForm({
                   className="mt-1 h-9"
                   type="number"
                   min="0"
-                  step="0.01"
+                  step="0.00000001"
                   value={item.unit_price ?? ""}
                   onChange={(e) =>
                     updateItem(index, {

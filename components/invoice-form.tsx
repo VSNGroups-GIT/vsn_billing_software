@@ -109,6 +109,16 @@ interface InvoiceItem {
 const sanitizeInvoiceNumberInput = (value: string) =>
   value.replace(/[^A-Za-z0-9-]/g, "");
 
+// Format a unit price with up to 8 decimal places, trimming trailing zeros
+// but always keeping at least 2 decimal places (e.g. 5.12345678, 5.50, 5.00).
+function formatUnitPrice(value: number): string {
+  const s = value.toFixed(8);
+  const dot = s.indexOf(".");
+  let end = s.length;
+  while (end > dot + 3 && s[end - 1] === "0") end--;
+  return s.slice(0, end);
+}
+
 const getNextInvoiceNumber = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -1240,7 +1250,7 @@ export function InvoiceForm({
                           )}
                         </div>
                         <div className="text-sm font-medium">
-                          ₹{previewPrice.toFixed(2)}
+                          ₹{formatUnitPrice(previewPrice)}
                         </div>
                       </div>
 
@@ -1248,7 +1258,7 @@ export function InvoiceForm({
                         <div className="mt-1 text-xs text-muted-foreground">
                           <div>
                             <span className="font-medium">Base:</span> ₹
-                            {breakdown.basePrice.toFixed(2)}
+                            {formatUnitPrice(breakdown.basePrice)}
                           </div>
                           {breakdown.ruleLabel && (
                             <div>
@@ -1258,12 +1268,12 @@ export function InvoiceForm({
                               {breakdown.ruleValueDisplay
                                 ? breakdown.ruleValueDisplay
                                 : "Applied"}{" "}
-                              → ₹{breakdown.afterRule.toFixed(2)}
+                              → ₹{formatUnitPrice(breakdown.afterRule)}
                             </div>
                           )}
                           <div>
                             <span className="font-medium">Unit Price:</span> ₹
-                            {breakdown.finalPrice.toFixed(2)}
+                            {formatUnitPrice(breakdown.finalPrice)}
                           </div>
                         </div>
                       )}
@@ -1307,7 +1317,7 @@ export function InvoiceForm({
                         <Label>Unit Price</Label>
                         <Input
                           type="number"
-                          step="0.01"
+                          step="0.00000001"
                           min="0"
                           placeholder="e.g., 250.00"
                           disabled

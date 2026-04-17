@@ -732,14 +732,14 @@ export function ClientPricingForm({
                           </Label>
                           <Input
                             type="number"
-                            step="0.01"
+                            step="0.00000001"
                             min="0"
                             required={rule.use_fixed_value}
                             value={rule.fixed_value || ""}
                             onChange={(e) =>
                               updateProductRule({ fixed_value: e.target.value })
                             }
-                            placeholder="Enter the fixed price value (e.g., 150.00)"
+                            placeholder="Enter the fixed price value (e.g., 150.12345678)"
                             className="bg-purple-50"
                           />
                           <p className="text-xs text-muted-foreground">
