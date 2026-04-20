@@ -30,7 +30,8 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         address,
         city,
         state,
-        zip_code
+        zip_code,
+        tax_id
       ),
       quotation_items (
         *,

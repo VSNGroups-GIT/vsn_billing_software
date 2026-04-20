@@ -28,7 +28,8 @@ export default async function InvoiceDetailPage({
         address,
         city,
         state,
-        zip_code
+        zip_code,
+        tax_id
       ),
       invoice_items (
         description,

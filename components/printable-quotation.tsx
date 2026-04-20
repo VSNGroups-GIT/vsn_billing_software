@@ -102,6 +102,13 @@ export function PrintableQuotation({ quotation, template, organizationTaxId, org
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  const formatUnitPrice = (value: string | number): string => {
+    const s = Number(value).toFixed(8);
+    const dot = s.indexOf(".");
+    let end = s.length;
+    while (end > dot + 3 && s[end - 1] === "0") end--;
+    return s.slice(0, end);
+  };
 
   const getDpi = () => {
     const probe = document.createElement("div");
@@ -332,6 +339,7 @@ export function PrintableQuotation({ quotation, template, organizationTaxId, org
                   {quotation.clients.state ? `, ${quotation.clients.state}` : ""}
                 </p>
               )}
+              {quotation.clients?.tax_id && <p className="mt-1 font-semibold text-slate-700">GSTIN: {quotation.clients.tax_id}</p>}
             </div>
 
             <p className="mb-3 text-[14px] text-slate-700 print:mb-2">
@@ -364,10 +372,7 @@ export function PrintableQuotation({ quotation, template, organizationTaxId, org
                       })}
                     </td>
                     <td className="border border-slate-400 px-2 py-1 text-right align-top">
-                      {Number(item.unit_price).toLocaleString("en-IN", {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 2,
-                      })}
+                      {formatUnitPrice(item.unit_price)}
                     </td>
                     <td className="border border-slate-400 px-2 py-1 text-right font-semibold align-top">
                       {formatCurrency(item.line_total)}

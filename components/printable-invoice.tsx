@@ -47,6 +47,7 @@ interface Invoice {
     city: string | null;
     state: string | null;
     zip_code: string | null;
+    tax_id?: string | null;
   };
   invoice_items: Array<{
     description: string;
@@ -144,6 +145,13 @@ export function PrintableInvoice({ invoice, template, organizationTaxId }: Print
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  const formatUnitPrice = (value: string | number): string => {
+    const s = Number(value).toFixed(8);
+    const dot = s.indexOf(".");
+    let end = s.length;
+    while (end > dot + 3 && s[end - 1] === "0") end--;
+    return s.slice(0, end);
+  };
   const numberToWords = (value: number) => {
     const ones = [
       "",
@@ -456,6 +464,7 @@ export function PrintableInvoice({ invoice, template, organizationTaxId }: Print
               )}
               {invoice.clients.email && <p className="text-slate-600 mt-1">Email: {invoice.clients.email}</p>}
               {invoice.clients.phone && <p className="text-slate-600">Phone: {invoice.clients.phone}</p>}
+              {invoice.clients.tax_id && <p className="text-slate-700 font-semibold mt-1">GSTIN: {invoice.clients.tax_id}</p>}
             </div>
 
             <div className="border border-slate-300 rounded-sm bg-white p-3">
@@ -555,10 +564,7 @@ export function PrintableInvoice({ invoice, template, organizationTaxId }: Print
                     })}
                   </td>
                   <td className="border-r border-slate-300 px-2 py-1.5 text-right">
-                    ₹{Number(item.unit_price).toLocaleString("en-IN", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    ₹{formatUnitPrice(item.unit_price)}
                   </td>
                   <td className="px-2 py-1.5 text-right font-semibold">
                     ₹{Number(item.line_total).toLocaleString("en-IN", {

@@ -122,13 +122,13 @@ async function loadDocument(documentType: SharedDocumentType, documentId: string
   const select = documentType === "invoice"
     ? `
       *,
-      clients(name, email, phone, address, city, state, zip_code),
+      clients(name, email, phone, address, city, state, zip_code, tax_id),
       invoice_items(description, quantity, unit_price, line_total),
       organizations:organization_id(name, address, phone, email, tax_id, tagline)
     `
     : `
       *,
-      clients(name, email, phone, address, city, state, zip_code),
+      clients(name, email, phone, address, city, state, zip_code, tax_id),
       quotation_items(description, quantity, unit_price, line_total, products(name)),
       organizations:organization_id(name, address, phone, email, tax_id, tagline)
     `;
@@ -644,6 +644,7 @@ function buildDocumentHtml(documentType: SharedDocumentType, payload: Awaited<Re
                 ${(client.city || "") ? `<p style="margin: 2px 0 0; font-size: 13px; color: #334155;">${escapeHtml(String(client.city || ""))}${client.state ? `, ${escapeHtml(String(client.state))}` : ""}${client.zip_code ? ` - ${escapeHtml(String(client.zip_code))}` : ""}</p>` : ""}
                 ${client.email ? `<p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Email: ${escapeHtml(String(client.email))}</p>` : ""}
                 ${client.phone ? `<p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Phone: ${escapeHtml(String(client.phone))}</p>` : ""}
+                ${client.tax_id ? `<p style="margin: 4px 0 0; font-size: 12px; color: #334155; font-weight: 600;">GSTIN: ${escapeHtml(String(client.tax_id))}</p>` : ""}
               </td>
               <td style="width: 40%; vertical-align: top; border: 1px solid #cbd5e1; background: #fff; padding: 10px;">
                 <p style="margin: 0; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: #64748b; font-weight: 700;">Amount Summary</p>
@@ -671,6 +672,7 @@ function buildDocumentHtml(documentType: SharedDocumentType, payload: Awaited<Re
             ${(client.city || "") ? `<p style="margin: 2px 0 0; font-size: 13px; color: #334155;">${escapeHtml(String(client.city || ""))}${client.state ? `, ${escapeHtml(String(client.state))}` : ""}${client.zip_code ? ` - ${escapeHtml(String(client.zip_code))}` : ""}</p>` : ""}
             ${client.email ? `<p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Email: ${escapeHtml(String(client.email))}</p>` : ""}
             ${client.phone ? `<p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Phone: ${escapeHtml(String(client.phone))}</p>` : ""}
+            ${client.tax_id ? `<p style="margin: 4px 0 0; font-size: 12px; color: #334155; font-weight: 600;">GSTIN: ${escapeHtml(String(client.tax_id))}</p>` : ""}
           </div>
         `}
 
