@@ -109,7 +109,7 @@ export function ClientPricingTable({
     const exportRows = processedRules.map((rule) => ({
       client: rule.clients.name,
       product: rule.products.name,
-      operator_price: `₹${calculateOperatorPrice(rule).toFixed(2)}`,
+      operator_price: `₹${formatUnitPrice(calculateOperatorPrice(rule))}`,
       base_price_type: rule.fixed_base_value !== null ? "Fixed Value" : "Default",
       base_category_or_fixed:
         rule.fixed_base_value !== null
@@ -204,6 +204,14 @@ export function ClientPricingTable({
     const finalPrice = calculateFinalPrice(rule);
     if (finalPrice <= 0) return 0;
     return (calculateMarginValue(rule) / finalPrice) * 100;
+  };
+
+  const formatUnitPrice = (value: number): string => {
+    const s = value.toFixed(8);
+    const dot = s.indexOf(".");
+    let end = s.length;
+    while (end > dot + 3 && s[end - 1] === "0") end--;
+    return s.slice(0, end);
   };
 
   // Apply filtering and sorting
@@ -490,10 +498,10 @@ export function ClientPricingTable({
                     )}
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-right px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-slate-700">
-                    ₹{operatorPrice.toFixed(2)}
+                    ₹{formatUnitPrice(operatorPrice)}
                   </TableCell>
                   <TableCell className="font-bold text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
-                    ₹{finalPrice.toFixed(2)}
+                    ₹{formatUnitPrice(finalPrice)}
                   </TableCell>
                   <TableCell className={`px-2 sm:px-4 py-2 sm:py-3 text-right text-xs sm:text-sm font-semibold ${marginPercent < 0 ? "text-red-600" : "text-blue-700"}`}>
                     {marginPercent.toFixed(2)}%

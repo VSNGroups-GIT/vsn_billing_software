@@ -222,7 +222,7 @@ export function ProductForm({ product, operators, userRole }: ProductFormProps) 
               id="operator_price"
               type="number"
               min="0"
-              step="0.0001"
+              step="0.00000001"
               value={formData.operator_price}
               onChange={(e) => setFormData({ ...formData, operator_price: e.target.value })}
               placeholder="Enter operator cost price"

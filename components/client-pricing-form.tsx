@@ -181,6 +181,14 @@ export function ClientPricingForm({
     { value: "conditional_discount", label: "Conditional Discount (₹)" },
   ];
 
+  const formatUnitPrice = (value: number): string => {
+    const s = value.toFixed(8);
+    const dot = s.indexOf(".");
+    let end = s.length;
+    while (end > dot + 3 && s[end - 1] === "0") end--;
+    return s.slice(0, end);
+  };
+
   const normalizeNumericString = (value: unknown): string => {
     if (value === null || value === undefined) return "";
     const str = String(value).trim();
@@ -668,7 +676,7 @@ export function ClientPricingForm({
                         <Label>Operator Price (₹)</Label>
                         <Input
                           type="number"
-                          step="0.0001"
+                          step="0.00000001"
                           min="0"
                           value={productOperatorPriceMap.get(product.id) ?? 0}
                           disabled
@@ -938,13 +946,13 @@ export function ClientPricingForm({
                                 Final Price Preview
                               </p>
                               <p className="text-2xl font-bold text-green-700">
-                                ₹{finalPrice.toFixed(2)}
+                                ₹{formatUnitPrice(finalPrice)}
                               </p>
                               <p className="text-sm mt-1 text-green-800">
                                 Margin: ₹{marginValue.toFixed(2)} ({marginPercent.toFixed(2)}%)
                               </p>
                               <p className="text-xs text-green-600 mt-1">
-                                {categoryName} Base: ₹{categoryPrice.toFixed(2)}{" "}
+                                {categoryName} Base: ₹{formatUnitPrice(categoryPrice)}{" "}
                                 →{" "}
                                 {rule.price_rule_type ===
                                   "discount_percentage" &&
