@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS public.clients (
   notes TEXT,
   due_days INTEGER DEFAULT 30,
   due_days_type VARCHAR(50) DEFAULT 'fixed_days' CHECK (due_days_type IN ('fixed_days', 'end_of_month')),
+  client_record_type TEXT NOT NULL DEFAULT 'permanent' CHECK (client_record_type IN ('temporary', 'permanent')),
   through_mediator BOOLEAN NOT NULL DEFAULT FALSE,
   enable_per_bird BOOLEAN DEFAULT false,
   value_per_bird NUMERIC(10, 2) DEFAULT 0,

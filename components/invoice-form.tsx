@@ -971,6 +971,15 @@ export function InvoiceForm({
           .is("converted_invoice_id", null);
 
         if (conversionUpdateError) throw conversionUpdateError;
+
+        // Promote quotation-created temporary clients to permanent on conversion.
+        const { error: clientPromotionError } = await supabase
+          .from("clients")
+          .update({ client_record_type: "permanent" })
+          .eq("id", formData.client_id)
+          .eq("client_record_type", "temporary");
+
+        if (clientPromotionError) throw clientPromotionError;
       }
 
       router.push(`/dashboard/invoices/${invoiceId}`);

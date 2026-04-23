@@ -28,7 +28,7 @@ export default async function NewQuotationPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">Create Quotation</h1>
         <p className="text-muted-foreground mt-1">
-          Generate a new quotation for a client
+          Generate a quotation for an existing client, or enter client details to create a record when you save.
         </p>
       </div>
 

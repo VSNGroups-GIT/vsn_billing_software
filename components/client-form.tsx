@@ -31,6 +31,7 @@ interface Client {
   due_days?: number | null;
   due_days_type?: string | null;
   through_mediator?: boolean | null;
+  client_record_type?: "temporary" | "permanent" | null;
 }
 
 interface ClientFormProps {
@@ -59,6 +60,7 @@ export function ClientForm({ client }: ClientFormProps) {
     due_days: client?.due_days?.toString() || "30",
     due_days_type: client?.due_days_type || "fixed_days",
     through_mediator: client?.through_mediator || false,
+    client_record_type: client?.client_record_type || "permanent",
   });
 
   const handlePincodeChange = async (pincode: string) => {
@@ -109,6 +111,10 @@ export function ClientForm({ client }: ClientFormProps) {
     value: country,
     label: country,
   }));
+  const recordTypeOptions = [
+    { value: "permanent", label: "Permanent" },
+    { value: "temporary", label: "Temporary" },
+  ];
 
   const handlePhoneChange = (value: string) => {
     const digitsOnly = value.replace(/\D/g, "").slice(0, 10);
@@ -193,6 +199,7 @@ export function ClientForm({ client }: ClientFormProps) {
         const { error } = await supabase.from("clients").insert({
           ...formData,
           due_days: dueDays,
+          client_record_type: "permanent",
           created_by: user.id,
           organization_id: profile.organization_id,
         });
@@ -389,6 +396,29 @@ export function ClientForm({ client }: ClientFormProps) {
               }
             />
           </div>
+
+          {client && (
+            <div className="space-y-2">
+              <Label htmlFor="client_record_type">Client Record Type</Label>
+              <SearchableSelect
+                id="client_record_type"
+                value={formData.client_record_type}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    client_record_type: value as "temporary" | "permanent",
+                  })
+                }
+                options={recordTypeOptions}
+                placeholder="Select record type"
+                searchPlaceholder="Type record type..."
+              />
+              <p className="text-xs text-muted-foreground">
+                Temporary clients are usually created from quotations and can be
+                promoted later.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="address">Address</Label>

@@ -54,6 +54,7 @@ interface Client {
   created_at: string;
   due_days?: number | null;
   due_days_type?: string | null;
+  client_record_type?: "temporary" | "permanent" | null;
   profiles?: {
     full_name: string;
   };
@@ -83,6 +84,7 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
     name: "",
     email: "",
     sector: "",
+    client_record_type: "",
     tax_id: "",
     city: "",
   });
@@ -130,6 +132,13 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
           .includes(filters.sector.toLowerCase()),
       );
     }
+    if (filters.client_record_type) {
+      filtered = filtered.filter((c) =>
+        (c.client_record_type || "permanent")
+          .toLowerCase()
+          .includes(filters.client_record_type.toLowerCase()),
+      );
+    }
     if (filters.city) {
       filtered = filtered.filter((c) =>
         (c.city || "").toLowerCase().includes(filters.city.toLowerCase()),
@@ -162,6 +171,10 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
           case "sector":
             aVal = a.sector || "";
             bVal = b.sector || "";
+            break;
+          case "client_record_type":
+            aVal = a.client_record_type || "permanent";
+            bVal = b.client_record_type || "permanent";
             break;
           case "due_days":
             aVal = a.due_days || 0;
@@ -229,6 +242,14 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
       { key: "name", label: "Name" },
       { key: "email", label: "Email" },
       { key: "sector", label: "Sector" },
+      {
+        key: "client_record_type",
+        label: "Client Type",
+        formatter: (value) =>
+          String(value || "permanent")
+            .replace("_", " ")
+            .replace(/\b\w/g, (m) => m.toUpperCase()),
+      },
       { key: "tax_id", label: "GST / Tax ID" },
       { key: "phone", label: "Phone" },
       { key: "address", label: "Address" },
@@ -313,6 +334,13 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
                 <SortIcon column="tax_id" />
               </TableHead>
               <TableHead
+                className="hidden xl:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("client_record_type")}
+              >
+                Client Type
+                <SortIcon column="client_record_type" />
+              </TableHead>
+              <TableHead
                 className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("city")}
               >
@@ -370,6 +398,16 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
                   className="h-7 text-xs"
                 />
               </TableHead>
+              <TableHead className="hidden xl:table-cell px-2 sm:px-4 py-2">
+                <Input
+                  placeholder="Filter..."
+                  value={filters.client_record_type}
+                  onChange={(e) =>
+                    handleFilterChange("client_record_type", e.target.value)
+                  }
+                  className="h-7 text-xs"
+                />
+              </TableHead>
               <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2">
                 <Input
                   placeholder="Filter..."
@@ -412,6 +450,19 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
                   {client.tax_id || (
                     <span className="text-muted-foreground">-</span>
                   )}
+                </TableCell>
+                <TableCell className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
+                  <span
+                    className={
+                      (client.client_record_type || "permanent") === "temporary"
+                        ? "text-amber-700 font-medium"
+                        : "text-emerald-700 font-medium"
+                    }
+                  >
+                    {(client.client_record_type || "permanent")
+                      .replace("_", " ")
+                      .replace(/\b\w/g, (m) => m.toUpperCase())}
+                  </span>
                 </TableCell>
                 <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
                   {client.city && client.state ? (

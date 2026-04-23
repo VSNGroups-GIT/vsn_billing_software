@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2 } from "lucide-react";
 
@@ -76,6 +78,22 @@ interface QuotationFormProps {
 
 const WHATSAPP_PRODUCT_NAMES = ["API Charges", "Business WhatsApp"];
 
+const dueTypeOptions = [
+  { value: "fixed_days", label: "Fixed Number of Days" },
+  { value: "end_of_month", label: "End of the billed month" },
+];
+
+const countryOptions = [
+  "India",
+  "USA",
+  "United Kingdom",
+  "Canada",
+  "Australia",
+  "Singapore",
+  "UAE",
+  "Other",
+].map((country) => ({ value: country, label: country }));
+
 const sanitizeQuotationNumberInput = (value: string) =>
   value.replace(/[^A-Za-z0-9-]/g, "");
 
@@ -110,6 +128,7 @@ export function QuotationForm({
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchingPincode, setFetchingPincode] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const today = new Date().toISOString().split("T")[0];
@@ -220,6 +239,67 @@ export function QuotationForm({
     notes: initialQuotation?.notes || "",
   });
 
+  const isEditingQuotation = Boolean(initialQuotation?.id);
+  const [clientEntryMode, setClientEntryMode] = useState<"existing" | "inline">("existing");
+  const [inlineClient, setInlineClient] = useState({
+    name: "",
+    email: "",
+    tax_id: "",
+    phone: "",
+    address: "",
+    city: "",
+    state: "",
+    zip_code: "",
+    country: "India",
+    notes: "",
+    due_days: "30",
+    due_days_type: "fixed_days",
+  });
+
+  const handleInlinePincodeChange = async (pincode: string) => {
+    const digitsOnly = pincode.replace(/\D/g, "").slice(0, 6);
+    setInlineClient((prev) => ({ ...prev, zip_code: digitsOnly }));
+
+    if (digitsOnly.length === 6 && /^\d{6}$/.test(digitsOnly)) {
+      setFetchingPincode(true);
+      try {
+        const response = await fetch(
+          `https://api.postalpincode.in/pincode/${digitsOnly}`,
+        );
+        const data = await response.json();
+        if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
+          const postOffice = data[0].PostOffice[0];
+          setInlineClient((prev) => ({
+            ...prev,
+            city: postOffice.District || prev.city,
+            state: postOffice.State || prev.state,
+            country: "India",
+          }));
+        }
+      } catch (_) {
+      } finally {
+        setFetchingPincode(false);
+      }
+    }
+  };
+
+  const getDueSettings = () => {
+    if (formData.client_id) {
+      const c = clients.find((x) => x.id === formData.client_id);
+      return {
+        dueDays: Number(c?.due_days ?? 30),
+        dueDaysType: c?.due_days_type ?? "fixed_days",
+      };
+    }
+    if (!isEditingQuotation && clientEntryMode === "inline") {
+      return {
+        dueDays: Number(inlineClient.due_days) || 0,
+        dueDaysType: inlineClient.due_days_type,
+      };
+    }
+    return { dueDays: 30, dueDaysType: "fixed_days" as const };
+  };
+
   const initialType = initialQuotation?.quotation_type || "other";
 
   const [items, setItems] = useState<QuotationItem[]>(() => {
@@ -263,6 +343,22 @@ export function QuotationForm({
       }),
     );
   };
+
+  useEffect(() => {
+    if (isEditingQuotation || clientEntryMode !== "inline") return;
+    const dueDays = Number(inlineClient.due_days) || 0;
+    const dueDaysType = inlineClient.due_days_type;
+    setFormData((prev) => ({
+      ...prev,
+      due_date: computeDueDateByType(prev.issue_date, dueDaysType, dueDays),
+    }));
+  }, [
+    inlineClient.due_days,
+    inlineClient.due_days_type,
+    clientEntryMode,
+    formData.issue_date,
+    isEditingQuotation,
+  ]);
 
   const addItem = () => {
     setItems((prev) => [
@@ -349,10 +445,6 @@ export function QuotationForm({
     setError(null);
 
     try {
-      if (!formData.client_id) {
-        throw new Error("Client is required");
-      }
-
       const cleanItems = items.filter(
         (item) => item.product_id && Number(item.quantity) > 0,
       );
@@ -376,6 +468,63 @@ export function QuotationForm({
         throw new Error("User must belong to an organization");
       }
 
+      let resolvedClientId = formData.client_id;
+
+      if (!isEditingQuotation && clientEntryMode === "inline") {
+        if (!inlineClient.name.trim()) {
+          throw new Error("Client name is required");
+        }
+        if (!inlineClient.email.trim()) {
+          throw new Error("Client email is required");
+        }
+        const phoneDigits = inlineClient.phone.replace(/\D/g, "").slice(0, 10);
+        if (!phoneDigits || phoneDigits.length < 10) {
+          throw new Error("Please enter a valid 10-digit phone number");
+        }
+        const dueDays = Number(inlineClient.due_days) || 0;
+        const { data: createdClient, error: clientError } = await supabase
+          .from("clients")
+          .insert({
+            name: inlineClient.name.trim(),
+            email: inlineClient.email.trim(),
+            tax_id: inlineClient.tax_id.trim() || null,
+            phone: phoneDigits,
+            address: inlineClient.address.trim() || null,
+            city: inlineClient.city.trim() || null,
+            state: inlineClient.state.trim() || null,
+            zip_code: inlineClient.zip_code.trim() || null,
+            country: inlineClient.country,
+            notes: inlineClient.notes.trim() || null,
+            due_days: dueDays,
+            due_days_type: inlineClient.due_days_type,
+            client_record_type: "temporary",
+            created_by: user.id,
+            organization_id: profile.organization_id,
+          })
+          .select("id")
+          .single();
+
+        if (clientError) {
+          if (
+            clientError.message?.includes("duplicate") ||
+            clientError.message?.includes("unique")
+          ) {
+            throw new Error(
+              "A client with this email already exists. Select them from the list or use a different email.",
+            );
+          }
+          throw clientError;
+        }
+        if (!createdClient?.id) {
+          throw new Error("Failed to create client record");
+        }
+        resolvedClientId = createdClient.id;
+      } else {
+        if (!resolvedClientId) {
+          throw new Error("Client is required");
+        }
+      }
+
       let quotationId = initialQuotation?.id;
 
       if (!quotationId) {
@@ -396,7 +545,7 @@ export function QuotationForm({
           .insert({
             quotation_number: quotationNumber,
             reference_number: `QREF-${Date.now()}`,
-            client_id: formData.client_id,
+            client_id: resolvedClientId,
             quotation_type: formData.quotation_type,
             issue_date: formData.issue_date,
             due_date: formData.due_date,
@@ -421,7 +570,7 @@ export function QuotationForm({
         const { error: updateError } = await supabase
           .from("quotations")
           .update({
-            client_id: formData.client_id,
+            client_id: resolvedClientId,
             quotation_type: formData.quotation_type,
             issue_date: formData.issue_date,
             due_date: formData.due_date,
@@ -476,17 +625,261 @@ export function QuotationForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
+            <div className="space-y-3 md:col-span-2">
               <Label>Client</Label>
-              <SearchableSelect
-                value={formData.client_id}
-                onValueChange={handleClientChange}
-                options={clientOptions}
-                placeholder="Select client..."
-                searchPlaceholder="Search client..."
-                emptyText="No client found."
-                triggerClassName="h-10"
-              />
+              {!isEditingQuotation ? (
+                <>
+                  <RadioGroup
+                    value={clientEntryMode}
+                    onValueChange={(value) => {
+                      const mode = value as "existing" | "inline";
+                      setClientEntryMode(mode);
+                      if (mode === "inline") {
+                        setFormData((prev) => {
+                          const dueDays = Number(inlineClient.due_days) || 0;
+                          const dueDaysType = inlineClient.due_days_type;
+                          return {
+                            ...prev,
+                            client_id: "",
+                            due_date: computeDueDateByType(
+                              prev.issue_date,
+                              dueDaysType,
+                              dueDays,
+                            ),
+                          };
+                        });
+                        setItems((prev) =>
+                          prev.map((item) => {
+                            if (!item.product_id) return item;
+                            const unitPrice = Number(
+                              products.find((p) => p.id === item.product_id)
+                                ?.unit_price || 0,
+                            );
+                            return {
+                              ...item,
+                              unit_price: unitPrice,
+                              line_total: calculateLineTotal({
+                                ...item,
+                                unit_price: unitPrice,
+                              }),
+                            };
+                          }),
+                        );
+                      } else {
+                        setFormData((prev) => ({ ...prev, client_id: "" }));
+                      }
+                    }}
+                    className="flex flex-col gap-2 sm:flex-row sm:gap-6"
+                  >
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="existing" id="client-mode-existing" />
+                      <Label htmlFor="client-mode-existing" className="font-normal cursor-pointer">
+                        Select existing client
+                      </Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="inline" id="client-mode-inline" />
+                      <Label htmlFor="client-mode-inline" className="font-normal cursor-pointer">
+                        Enter client details (quotation only)
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                  {clientEntryMode === "existing" ? (
+                    <SearchableSelect
+                      value={formData.client_id}
+                      onValueChange={handleClientChange}
+                      options={clientOptions}
+                      placeholder="Select client..."
+                      searchPlaceholder="Search client..."
+                      emptyText="No client found."
+                      triggerClassName="h-10 max-w-md"
+                    />
+                  ) : (
+                    <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
+                      <p className="text-xs text-muted-foreground">
+                        A client record is created when you save, so the quotation is linked like any other. You can edit the full profile later from Clients.
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="qc-name">
+                            Client name <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="qc-name"
+                            value={inlineClient.name}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({ ...p, name: e.target.value }))
+                            }
+                            placeholder="Company or contact name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="qc-email">
+                            Email <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="qc-email"
+                            type="email"
+                            value={inlineClient.email}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({ ...p, email: e.target.value }))
+                            }
+                            placeholder="contact@example.com"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="qc-phone">
+                            Phone <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="qc-phone"
+                            type="tel"
+                            inputMode="numeric"
+                            maxLength={10}
+                            value={inlineClient.phone}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({
+                                ...p,
+                                phone: e.target.value.replace(/\D/g, "").slice(0, 10),
+                              }))
+                            }
+                            placeholder="10-digit mobile"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="qc-tax">GST / Tax ID</Label>
+                          <Input
+                            id="qc-tax"
+                            value={inlineClient.tax_id}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({ ...p, tax_id: e.target.value }))
+                            }
+                            placeholder="Optional"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="qc-address">Address</Label>
+                          <Input
+                            id="qc-address"
+                            value={inlineClient.address}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({ ...p, address: e.target.value }))
+                            }
+                            placeholder="Street address"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="qc-city">City</Label>
+                          <Input
+                            id="qc-city"
+                            value={inlineClient.city}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({ ...p, city: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="qc-state">State</Label>
+                          <Input
+                            id="qc-state"
+                            value={inlineClient.state}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({ ...p, state: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="qc-zip">Pincode</Label>
+                          <Input
+                            id="qc-zip"
+                            value={inlineClient.zip_code}
+                            onChange={(e) =>
+                              handleInlinePincodeChange(e.target.value)
+                            }
+                            placeholder="6 digits"
+                            disabled={fetchingPincode}
+                          />
+                          {fetchingPincode && (
+                            <p className="text-xs text-blue-600 flex items-center gap-1">
+                              <Spinner className="h-3 w-3" />
+                              Fetching location...
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Country</Label>
+                          <SearchableSelect
+                            value={inlineClient.country}
+                            onValueChange={(v) =>
+                              setInlineClient((p) => ({ ...p, country: v }))
+                            }
+                            options={countryOptions}
+                            placeholder="Country"
+                            searchPlaceholder="Search..."
+                            triggerClassName="h-10"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Due payment type</Label>
+                          <SearchableSelect
+                            value={inlineClient.due_days_type}
+                            onValueChange={(v) =>
+                              setInlineClient((p) => ({ ...p, due_days_type: v }))
+                            }
+                            options={dueTypeOptions}
+                            placeholder="Select"
+                            searchPlaceholder="Search..."
+                            triggerClassName="h-10"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="qc-due-days">
+                            {inlineClient.due_days_type === "fixed_days"
+                              ? "Due days to pay"
+                              : "Months before month-end due"}
+                          </Label>
+                          <Input
+                            id="qc-due-days"
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={inlineClient.due_days}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({
+                                ...p,
+                                due_days: e.target.value,
+                              }))
+                            }
+                            disabled={inlineClient.due_days_type === "end_of_month"}
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="qc-notes">Client notes</Label>
+                          <Textarea
+                            id="qc-notes"
+                            value={inlineClient.notes}
+                            onChange={(e) =>
+                              setInlineClient((p) => ({ ...p, notes: e.target.value }))
+                            }
+                            rows={2}
+                            placeholder="Optional internal notes"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <SearchableSelect
+                  value={formData.client_id}
+                  onValueChange={handleClientChange}
+                  options={clientOptions}
+                  placeholder="Select client..."
+                  searchPlaceholder="Search client..."
+                  emptyText="No client found."
+                  triggerClassName="h-10 max-w-md"
+                />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -520,7 +913,9 @@ export function QuotationForm({
                   setFormData((prev) => ({ ...prev, quotation_type: newType }));
                   // For new quotations, rebuild default items when type changes
                   if (!initialQuotation?.id) {
-                    setItems(buildDefaultItems(newType, formData.client_id));
+                    const clientIdForDefaults =
+                      clientEntryMode === "existing" ? formData.client_id : "";
+                    setItems(buildDefaultItems(newType, clientIdForDefaults));
                   }
                 }}
                 options={quotationTypeOptions}
@@ -535,9 +930,7 @@ export function QuotationForm({
                 value={formData.issue_date}
                 onChange={(e) => {
                   const nextIssueDate = e.target.value;
-                  const selectedClient = clients.find((c) => c.id === formData.client_id);
-                  const dueDays = Number(selectedClient?.due_days ?? 30);
-                  const dueDaysType = selectedClient?.due_days_type ?? "fixed_days";
+                  const { dueDays, dueDaysType } = getDueSettings();
                   const nextDueDate = computeDueDateByType(
                     nextIssueDate,
                     dueDaysType,

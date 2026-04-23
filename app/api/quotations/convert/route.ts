@@ -156,6 +156,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to update quotation conversion state" }, { status: 400 });
     }
 
+    const { error: clientPromotionError } = await supabase
+      .from("clients")
+      .update({ client_record_type: "permanent" })
+      .eq("id", quotation.client_id)
+      .eq("client_record_type", "temporary");
+
+    if (clientPromotionError) {
+      return NextResponse.json({ error: "Invoice created but failed to update client record type" }, { status: 400 });
+    }
+
     return NextResponse.json({ success: true, invoiceId: invoice.id });
   } catch (error) {
     return NextResponse.json(
