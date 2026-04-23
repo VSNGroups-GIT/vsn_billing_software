@@ -12,7 +12,7 @@ export default async function NewPaymentPage({
   // Fetch all clients
   const { data: clients } = await supabase
     .from("clients")
-    .select("id, name")
+    .select("id, name, through_mediator")
     .order("name", { ascending: true })
 
   // Fetch unpaid or partially paid invoices with clients data and client_id

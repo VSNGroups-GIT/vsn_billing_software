@@ -156,6 +156,48 @@ export default async function PaymentDetailPage({
                 </p>
               </div>
 
+              {Number(payment.mediator_amount || 0) > 0 && (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Mediator Deduction
+                    </p>
+                    <p className="font-medium text-amber-700">
+                      ₹
+                      {Number(payment.mediator_amount).toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Net Received</p>
+                    <p className="font-semibold text-green-700">
+                      ₹
+                      {Number(
+                        payment.net_amount ?? payment.amount,
+                      ).toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {Number(payment.tds_amount || 0) > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground">TDS</p>
+                  <p className="font-medium text-blue-700">
+                    ₹
+                    {Number(payment.tds_amount || 0).toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <p className="text-sm text-muted-foreground">Payment Method</p>
                 <p className="font-medium capitalize">

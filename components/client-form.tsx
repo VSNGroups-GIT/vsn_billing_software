@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -18,6 +19,7 @@ interface Client {
   id: string;
   name: string;
   email: string;
+  sector?: string | null;
   tax_id?: string | null;
   phone: string | null;
   address: string | null;
@@ -28,6 +30,7 @@ interface Client {
   notes: string | null;
   due_days?: number | null;
   due_days_type?: string | null;
+  through_mediator?: boolean | null;
 }
 
 interface ClientFormProps {
@@ -44,6 +47,7 @@ export function ClientForm({ client }: ClientFormProps) {
   const [formData, setFormData] = useState({
     name: client?.name || "",
     email: client?.email || "",
+    sector: client?.sector || "",
     tax_id: client?.tax_id || "",
     phone: client?.phone || "",
     address: client?.address || "",
@@ -54,6 +58,7 @@ export function ClientForm({ client }: ClientFormProps) {
     notes: client?.notes || "",
     due_days: client?.due_days?.toString() || "30",
     due_days_type: client?.due_days_type || "fixed_days",
+    through_mediator: client?.through_mediator || false,
   });
 
   const handlePincodeChange = async (pincode: string) => {
@@ -283,6 +288,18 @@ export function ClientForm({ client }: ClientFormProps) {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="sector">Sector</Label>
+              <Input
+                id="sector"
+                value={formData.sector}
+                onChange={(e) =>
+                  setFormData({ ...formData, sector: e.target.value })
+                }
+                placeholder="Hospitality, Retail, Logistics..."
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="tax_id">GST / Tax ID</Label>
               <Input
                 id="tax_id"
@@ -354,6 +371,23 @@ export function ClientForm({ client }: ClientFormProps) {
                 searchPlaceholder="Type country..."
               />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-1">
+              <Label htmlFor="through_mediator">Through Mediator</Label>
+              <p className="text-xs text-muted-foreground">
+                Enable if this client is handled via a mediator so deductions can
+                be tracked during payment.
+              </p>
+            </div>
+            <Switch
+              id="through_mediator"
+              checked={formData.through_mediator}
+              onCheckedChange={(checked) =>
+                setFormData({ ...formData, through_mediator: checked })
+              }
+            />
           </div>
 
           <div className="space-y-2">

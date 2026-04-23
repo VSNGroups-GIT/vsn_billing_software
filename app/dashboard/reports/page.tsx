@@ -47,7 +47,7 @@ export default async function ReportsPage({
   // Fetch all required data in parallel
   const [clientsResult, currentMonthInvoicesResult, allUnpaidInvoicesResult, currentMonthPaymentsResult, productsResult] =
     await Promise.all([
-      supabase.from("clients").select("id, name").order("name", { ascending: true }),
+      supabase.from("clients").select("id, name, sector").order("name", { ascending: true }),
 
       supabase
         .from("invoices")
@@ -63,7 +63,7 @@ export default async function ReportsPage({
 
       supabase
         .from("payments")
-        .select("amount, invoices(client_id)")
+        .select("amount, net_amount, invoices(client_id)")
         .gte("payment_date", monthStart)
         .lte("payment_date", monthEnd),
 
@@ -87,11 +87,14 @@ export default async function ReportsPage({
   type ClientRow = {
     id: string
     name: string
+    sector: string
     sale: number
     todaySaleQty: number
     todaySaleValue: number
     operatorCost: number
     marginValue: number
+    mediatorCharges: number
+    netMarginAfterMediator: number
     marginPercent: number
     payments: number
     outstanding: number
@@ -103,11 +106,14 @@ export default async function ReportsPage({
     clientMap.set(client.id, {
       id: client.id,
       name: client.name,
+      sector: client.sector || "Uncategorized",
       sale: 0,
       todaySaleQty: 0,
       todaySaleValue: 0,
       operatorCost: 0,
       marginValue: 0,
+      mediatorCharges: 0,
+      netMarginAfterMediator: 0,
       marginPercent: 0,
       payments: 0,
       outstanding: 0,
@@ -156,12 +162,50 @@ export default async function ReportsPage({
     if (!clientId) continue
     const row = clientMap.get(clientId)
     if (!row) continue
-    row.payments += Number(payment.amount)
+    row.payments += Number(payment.net_amount ?? payment.amount)
+    row.mediatorCharges += Number(payment.amount) - Number(payment.net_amount ?? payment.amount)
+    row.netMarginAfterMediator = row.marginValue - row.mediatorCharges
   }
 
   const rows = Array.from(clientMap.values()).filter(
     (r) => r.sale > 0 || r.payments > 0 || r.outstanding > 0 || r.oldBal > 0,
   )
+
+  const sectorMap = new Map<
+    string,
+    {
+      sector: string
+      sale: number
+      payments: number
+      operatorCost: number
+      marginValue: number
+      mediatorCharges: number
+      netMarginAfterMediator: number
+      outstanding: number
+    }
+  >()
+  for (const row of rows) {
+    const sector = row.sector || "Uncategorized"
+    const existing = sectorMap.get(sector) || {
+      sector,
+      sale: 0,
+      payments: 0,
+      operatorCost: 0,
+      marginValue: 0,
+      mediatorCharges: 0,
+      netMarginAfterMediator: 0,
+      outstanding: 0,
+    }
+    existing.sale += row.sale
+    existing.payments += row.payments
+    existing.operatorCost += row.operatorCost
+    existing.marginValue += row.marginValue
+    existing.mediatorCharges += row.mediatorCharges
+    existing.netMarginAfterMediator += row.netMarginAfterMediator
+    existing.outstanding += row.outstanding
+    sectorMap.set(sector, existing)
+  }
+  const sectorRows = Array.from(sectorMap.values())
 
   return (
     <DashboardPageWrapper title="Reports">
@@ -177,7 +221,7 @@ export default async function ReportsPage({
           <MonthYearPicker currentYear={reportYear} currentMonth={reportMonth} />
         </div>
 
-        <ReportsTable rows={rows} daysInMonth={daysInMonth} monthLabel={monthLabel} />
+        <ReportsTable rows={rows} sectorRows={sectorRows} daysInMonth={daysInMonth} monthLabel={monthLabel} />
       </div>
     </DashboardPageWrapper>
   )

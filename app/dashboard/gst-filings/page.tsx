@@ -45,6 +45,7 @@ export default async function GstFilingsPage() {
         total_amount,
         gst_percent,
         split_gst,
+        payments(tds_amount),
         clients!inner(name, tax_id),
         invoice_items(line_total, products(hsn_code))
       `,

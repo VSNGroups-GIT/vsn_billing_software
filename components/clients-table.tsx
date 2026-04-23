@@ -43,6 +43,7 @@ interface Client {
   id: string;
   name: string;
   email: string;
+  sector?: string | null;
   tax_id?: string | null;
   phone: string | null;
   address: string | null;
@@ -81,6 +82,7 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
   const [filters, setFilters] = useState({
     name: "",
     email: "",
+    sector: "",
     tax_id: "",
     city: "",
   });
@@ -121,6 +123,13 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
         (c.tax_id || "").toLowerCase().includes(filters.tax_id.toLowerCase()),
       );
     }
+    if (filters.sector) {
+      filtered = filtered.filter((c) =>
+        (c.sector || "")
+          .toLowerCase()
+          .includes(filters.sector.toLowerCase()),
+      );
+    }
     if (filters.city) {
       filtered = filtered.filter((c) =>
         (c.city || "").toLowerCase().includes(filters.city.toLowerCase()),
@@ -149,6 +158,10 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
           case "tax_id":
             aVal = a.tax_id || "";
             bVal = b.tax_id || "";
+            break;
+          case "sector":
+            aVal = a.sector || "";
+            bVal = b.sector || "";
             break;
           case "due_days":
             aVal = a.due_days || 0;
@@ -215,6 +228,7 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
     const columns: ExportColumn[] = [
       { key: "name", label: "Name" },
       { key: "email", label: "Email" },
+      { key: "sector", label: "Sector" },
       { key: "tax_id", label: "GST / Tax ID" },
       { key: "phone", label: "Phone" },
       { key: "address", label: "Address" },
@@ -286,6 +300,13 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
               </TableHead>
               <TableHead
                 className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("sector")}
+              >
+                Sector
+                <SortIcon column="sector" />
+              </TableHead>
+              <TableHead
+                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("tax_id")}
               >
                 GST / Tax ID
@@ -336,6 +357,14 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2">
                 <Input
                   placeholder="Filter..."
+                  value={filters.sector}
+                  onChange={(e) => handleFilterChange("sector", e.target.value)}
+                  className="h-7 text-xs"
+                />
+              </TableHead>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2">
+                <Input
+                  placeholder="Filter..."
                   value={filters.tax_id}
                   onChange={(e) => handleFilterChange("tax_id", e.target.value)}
                   className="h-7 text-xs"
@@ -373,6 +402,11 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
                       </div>
                     )}
                   </div>
+                </TableCell>
+                <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
+                  {client.sector || (
+                    <span className="text-muted-foreground">-</span>
+                  )}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
                   {client.tax_id || (

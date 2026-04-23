@@ -46,6 +46,7 @@ interface Product {
   name: string
   description: string | null
   hsn_code?: string | null
+  operator_price?: string | number | null
   is_active: boolean
   created_at: string
   position?: number
@@ -108,6 +109,9 @@ function SortableProductRow({
       </TableCell>
       <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 max-w-xs truncate">
         {product.operators?.name || <span className="text-muted-foreground">-</span>}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
+        ₹{Number(product.operator_price || 0).toFixed(2)}
       </TableCell>
       <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
         {product.is_active ? (
@@ -172,6 +176,7 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
     description: '',
     hsn_code: '',
     operator: '',
+    operator_price: '',
   })
 
   const handleSort = (column: string) => {
@@ -212,6 +217,11 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
         (p.operators?.name || '').toLowerCase().includes(filters.operator.toLowerCase())
       )
     }
+    if (filters.operator_price) {
+      filtered = filtered.filter((p) =>
+        String(Number(p.operator_price || 0).toFixed(2)).includes(filters.operator_price),
+      )
+    }
 
     // Apply sorting
     if (sortColumn) {
@@ -239,6 +249,10 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
           case 'operator':
             aVal = a.operators?.name || ''
             bVal = b.operators?.name || ''
+            break
+          case 'operator_price':
+            aVal = Number(a.operator_price || 0)
+            bVal = Number(b.operator_price || 0)
             break
           default:
             return 0
@@ -339,6 +353,11 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
         formatter: (val) => (val && typeof val === "object" && "name" in val ? String(val.name) : ""),
       },
       {
+        key: "operator_price",
+        label: "Operator Price",
+        formatter: (val) => Number(val || 0).toFixed(2),
+      },
+      {
         key: "is_active",
         label: "Active",
         formatter: (val) => (val ? "Yes" : "No"),
@@ -391,6 +410,9 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
                 <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('operator')}>
                   Operator<SortIcon column="operator" />
                 </TableHead>
+                <TableHead className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('operator_price')}>
+                  Operator Price<SortIcon column="operator_price" />
+                </TableHead>
                 <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('is_active')}>
                   Status<SortIcon column="is_active" />
                 </TableHead>
@@ -429,6 +451,14 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
                     placeholder="Filter..."
                     value={filters.operator}
                     onChange={(e) => handleFilterChange('operator', e.target.value)}
+                    className="h-8"
+                  />
+                </TableHead>
+                <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2">
+                  <Input
+                    placeholder="Filter..."
+                    value={filters.operator_price}
+                    onChange={(e) => handleFilterChange('operator_price', e.target.value)}
                     className="h-8"
                   />
                 </TableHead>

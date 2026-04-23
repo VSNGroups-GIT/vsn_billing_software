@@ -17,11 +17,14 @@ import { TablePagination } from "@/components/table-pagination"
 type ClientRow = {
   id: string
   name: string
+  sector: string
   sale: number
   todaySaleQty: number
   todaySaleValue: number
   operatorCost: number
   marginValue: number
+  mediatorCharges: number
+  netMarginAfterMediator: number
   marginPercent: number
   payments: number
   outstanding: number
@@ -30,11 +33,21 @@ type ClientRow = {
 
 interface ReportsTableProps {
   rows: ClientRow[]
+  sectorRows: {
+    sector: string
+    sale: number
+    payments: number
+    operatorCost: number
+    marginValue: number
+    mediatorCharges: number
+    netMarginAfterMediator: number
+    outstanding: number
+  }[]
   daysInMonth: number
   monthLabel: string
 }
 
-export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProps) {
+export function ReportsTable({ rows, sectorRows, daysInMonth, monthLabel }: ReportsTableProps) {
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
@@ -43,7 +56,10 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
   const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Filter state
-  const [filters, setFilters] = useState({ hotel: "" })
+  const [filters, setFilters] = useState({ hotel: "", sector: "" })
+  const [sectorFilter, setSectorFilter] = useState("")
+  const [sectorSortColumn, setSectorSortColumn] = useState<string>("sale")
+  const [sectorSortDirection, setSectorSortDirection] = useState<"asc" | "desc">("desc")
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -76,6 +92,11 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
         r.name.toLowerCase().includes(filters.hotel.toLowerCase()),
       )
     }
+    if (filters.sector) {
+      filtered = filtered.filter((r) =>
+        (r.sector || "").toLowerCase().includes(filters.sector.toLowerCase()),
+      )
+    }
 
     if (sortColumn) {
       filtered.sort((a, b) => {
@@ -90,6 +111,10 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           case "oldBal":
             aVal = a.oldBal
             bVal = b.oldBal
+            break
+          case "sector":
+            aVal = (a.sector || "").toLowerCase()
+            bVal = (b.sector || "").toLowerCase()
             break
           case "sale":
             aVal = a.sale
@@ -118,6 +143,10 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           case "marginPercent":
             aVal = a.marginPercent
             bVal = b.marginPercent
+            break
+          case "netMarginAfterMediator":
+            aVal = a.netMarginAfterMediator
+            bVal = b.netMarginAfterMediator
             break
           case "outstanding":
             aVal = a.outstanding
@@ -148,6 +177,8 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           todaySaleValue: acc.todaySaleValue + r.todaySaleValue,
           operatorCost: acc.operatorCost + r.operatorCost,
           marginValue: acc.marginValue + r.marginValue,
+          mediatorCharges: acc.mediatorCharges + r.mediatorCharges,
+          netMarginAfterMediator: acc.netMarginAfterMediator + r.netMarginAfterMediator,
           payments: acc.payments + r.payments,
           outstanding: acc.outstanding + r.outstanding,
         }),
@@ -158,6 +189,8 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           todaySaleValue: 0,
           operatorCost: 0,
           marginValue: 0,
+          mediatorCharges: 0,
+          netMarginAfterMediator: 0,
           payments: 0,
           outstanding: 0,
         },
@@ -167,6 +200,57 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
 
   const fmt = (n: number) =>
     n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const processedSectorRows = useMemo(() => {
+    let filtered = [...sectorRows]
+    if (sectorFilter.trim()) {
+      const query = sectorFilter.trim().toLowerCase()
+      filtered = filtered.filter((r) => r.sector.toLowerCase().includes(query))
+    }
+    filtered.sort((a, b) => {
+      let aVal: string | number = a.sale
+      let bVal: string | number = b.sale
+      switch (sectorSortColumn) {
+        case "sector":
+          aVal = a.sector.toLowerCase()
+          bVal = b.sector.toLowerCase()
+          break
+        case "payments":
+          aVal = a.payments
+          bVal = b.payments
+          break
+        case "operatorCost":
+          aVal = a.operatorCost
+          bVal = b.operatorCost
+          break
+        case "marginValue":
+          aVal = a.marginValue
+          bVal = b.marginValue
+          break
+        case "netMarginAfterMediator":
+          aVal = a.netMarginAfterMediator
+          bVal = b.netMarginAfterMediator
+          break
+        case "outstanding":
+          aVal = a.outstanding
+          bVal = b.outstanding
+          break
+      }
+      if (aVal < bVal) return sectorSortDirection === "asc" ? -1 : 1
+      if (aVal > bVal) return sectorSortDirection === "asc" ? 1 : -1
+      return 0
+    })
+    return filtered
+  }, [sectorRows, sectorFilter, sectorSortColumn, sectorSortDirection])
+
+  const handleSectorSort = (column: string) => {
+    if (sectorSortColumn === column) {
+      setSectorSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
+    } else {
+      setSectorSortColumn(column)
+      setSectorSortDirection(column === "sector" ? "asc" : "desc")
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -180,6 +264,12 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 onClick={() => handleSort("hotel")}
               >
                 Clients <SortIcon column="hotel" />
+              </TableHead>
+              <TableHead
+                className="px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("sector")}
+              >
+                Sector <SortIcon column="sector" />
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
@@ -209,7 +299,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("payments")}
               >
-                Payments <SortIcon column="payments" />
+                Net Payments <SortIcon column="payments" />
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
@@ -231,6 +321,12 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
               </TableHead>
               <TableHead
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("netMarginAfterMediator")}
+              >
+                Net Margin After Mediator ₹ <SortIcon column="netMarginAfterMediator" />
+              </TableHead>
+              <TableHead
+                className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("outstanding")}
               >
                 Outstanding <SortIcon column="outstanding" />
@@ -247,6 +343,14 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                   className="h-7 text-xs font-normal"
                 />
               </TableHead>
+              <TableHead className="px-2 sm:px-4 py-1.5">
+                <Input
+                  placeholder="Filter sector…"
+                  value={filters.sector}
+                  onChange={(e) => handleFilterChange("sector", e.target.value)}
+                  className="h-7 text-xs font-normal"
+                />
+              </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
                 Outstanding - Current month Sale
               </TableHead>
@@ -260,7 +364,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 Current day sale value
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
-                Current month payments
+                Current month net receipts
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
                 Estimated monthly cost
@@ -272,6 +376,9 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 (Margin ₹ / Sale) × 100
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
+                Margin ₹ - mediator charges
+              </TableHead>
+              <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
                 Total outstanding
               </TableHead>
             </TableRow>
@@ -281,7 +388,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
             {pagination.paginatedItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={10}
+                  colSpan={12}
                   className="text-center text-muted-foreground py-16 px-2 sm:px-4"
                 >
                   {filters.hotel
@@ -294,6 +401,9 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 <TableRow key={row.id}>
                   <TableCell className="sticky left-0 z-10 bg-white border-r font-medium px-2 sm:px-4 py-2 sm:py-3 min-w-[180px] w-[180px] whitespace-nowrap">
                     {row.name}
+                  </TableCell>
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
+                    {row.sector || "Uncategorized"}
                   </TableCell>
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                     {row.oldBal > 0 ? `₹${fmt(row.oldBal)}` : "—"}
@@ -319,6 +429,9 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                   <TableCell className={`text-right px-2 sm:px-4 py-2 sm:py-3 font-semibold ${row.marginPercent < 0 ? "text-red-700" : "text-blue-700"}`}>
                     {row.sale > 0 ? `${row.marginPercent.toFixed(2)}%` : "—"}
                   </TableCell>
+                  <TableCell className={`text-right px-2 sm:px-4 py-2 sm:py-3 font-semibold ${row.netMarginAfterMediator < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                    {row.netMarginAfterMediator !== 0 ? `₹${fmt(row.netMarginAfterMediator)}` : "—"}
+                  </TableCell>
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-semibold text-orange-700">
                     {row.outstanding > 0 ? `₹${fmt(row.outstanding)}` : "—"}
                   </TableCell>
@@ -332,6 +445,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 <TableCell className="sticky left-0 z-30 bg-muted border-r px-2 sm:px-4 py-2 sm:py-3 min-w-[180px] w-[180px] whitespace-nowrap">
                   Total Sale
                 </TableCell>
+                <TableCell className="px-2 sm:px-4 py-2 sm:py-3">—</TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                   ₹{fmt(totals.oldBal)}
                 </TableCell>
@@ -356,6 +470,9 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
                 <TableCell className={`text-right px-2 sm:px-4 py-2 sm:py-3 ${totals.sale > 0 && totals.marginValue / totals.sale < 0 ? "text-red-700" : "text-blue-700"}`}>
                   {totals.sale > 0 ? `${((totals.marginValue / totals.sale) * 100).toFixed(2)}%` : "—"}
                 </TableCell>
+                <TableCell className={`text-right px-2 sm:px-4 py-2 sm:py-3 ${totals.netMarginAfterMediator < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                  ₹{fmt(totals.netMarginAfterMediator)}
+                </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-orange-700">
                   ₹{fmt(totals.outstanding)}
                 </TableCell>
@@ -373,6 +490,75 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
         onPageChange={pagination.goToPage}
         onItemsPerPageChange={setItemsPerPage}
       />
+
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <div className="p-4 border-b">
+          <h3 className="font-semibold">Sector-wise Summary</h3>
+          <p className="text-xs text-muted-foreground">
+            Aggregated profits and transaction values by sector.
+          </p>
+        </div>
+        <div className="p-4 border-b">
+          <Input
+            placeholder="Filter sectors..."
+            value={sectorFilter}
+            onChange={(e) => setSectorFilter(e.target.value)}
+            className="h-8 max-w-xs"
+          />
+        </div>
+        <Table className="text-xs sm:text-sm min-w-[900px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSectorSort("sector")}>
+                Sector
+              </TableHead>
+              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSectorSort("sale")}>
+                Sale
+              </TableHead>
+              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSectorSort("payments")}>
+                Net Payments
+              </TableHead>
+              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSectorSort("operatorCost")}>
+                Operator Cost
+              </TableHead>
+              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSectorSort("marginValue")}>
+                Margin
+              </TableHead>
+              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSectorSort("netMarginAfterMediator")}>
+                Net Margin After Mediator
+              </TableHead>
+              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSectorSort("outstanding")}>
+                Outstanding
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {processedSectorRows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                  No sector summary data found.
+                </TableCell>
+              </TableRow>
+            ) : (
+              processedSectorRows.map((row) => (
+                <TableRow key={row.sector}>
+                  <TableCell className="font-medium">{row.sector}</TableCell>
+                  <TableCell className="text-right">₹{fmt(row.sale)}</TableCell>
+                  <TableCell className="text-right text-green-700">₹{fmt(row.payments)}</TableCell>
+                  <TableCell className="text-right text-slate-700">₹{fmt(row.operatorCost)}</TableCell>
+                  <TableCell className={`text-right font-semibold ${row.marginValue < 0 ? "text-red-700" : "text-blue-700"}`}>
+                    ₹{fmt(row.marginValue)}
+                  </TableCell>
+                  <TableCell className={`text-right font-semibold ${row.netMarginAfterMediator < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                    ₹{fmt(row.netMarginAfterMediator)}
+                  </TableCell>
+                  <TableCell className="text-right text-orange-700">₹{fmt(row.outstanding)}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 }

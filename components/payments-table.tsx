@@ -43,6 +43,9 @@ interface Payment {
   id: string;
   invoice_id: string;
   amount: string;
+  tds_amount?: string | null;
+  mediator_amount?: string | null;
+  net_amount?: string | null;
   payment_date: string;
   payment_method: string;
   reference_number: string | null;
@@ -355,6 +358,11 @@ export function PaymentsTable({
   };
 
   const handleExport = async () => {
+    const exportRows = processedPayments.map((payment) => ({
+      ...payment,
+      computed_net_amount: Number(payment.net_amount ?? payment.amount),
+    }));
+
     const columns: ExportColumn[] = [
       {
         key: "invoices",
@@ -368,8 +376,23 @@ export function PaymentsTable({
       },
       {
         key: "amount",
-        label: "Amount",
+        label: "Gross Amount",
         formatter: (amount) => Number(amount).toFixed(2),
+      },
+      {
+        key: "tds_amount",
+        label: "TDS",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+      {
+        key: "mediator_amount",
+        label: "Mediator Deduction",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+      {
+        key: "computed_net_amount",
+        label: "Net Amount",
+        formatter: (value) => Number(value).toFixed(2),
       },
       {
         key: "payment_date",
@@ -396,7 +419,7 @@ export function PaymentsTable({
       },
     ];
 
-    await exportToCSVAsync(processedPayments, columns, `payments-${getTimestamp()}.csv`);
+    await exportToCSVAsync(exportRows, columns, `payments-${getTimestamp()}.csv`);
     toast({
       variant: "success",
       title: "Exported",
@@ -410,6 +433,9 @@ export function PaymentsTable({
       invoice_number: p.invoices.invoice_number,
       client_name: p.invoices.clients.name,
       amount_fmt: `Rs.${Number(p.amount).toFixed(2)}`,
+      tds_amount_fmt: `Rs.${Number(p.tds_amount || 0).toFixed(2)}`,
+      mediator_amount_fmt: `Rs.${Number(p.mediator_amount || 0).toFixed(2)}`,
+      net_amount_fmt: `Rs.${Number(p.net_amount ?? p.amount).toFixed(2)}`,
       payment_date_fmt: new Date(p.payment_date).toLocaleDateString("en-IN", {
         year: "numeric",
         month: "2-digit",
@@ -427,6 +453,9 @@ export function PaymentsTable({
       { key: "invoice_number", label: "Invoice #" },
       { key: "client_name", label: "Client" },
       { key: "amount_fmt", label: "Amount" },
+      { key: "tds_amount_fmt", label: "TDS" },
+      { key: "mediator_amount_fmt", label: "Mediator Deduction" },
+      { key: "net_amount_fmt", label: "Net Amount" },
       { key: "method_label", label: "Method" },
       { key: "reference_number", label: "Reference" },
       { key: "status_label", label: "Status" },
@@ -629,11 +658,36 @@ export function PaymentsTable({
                         {payment.invoices.clients.name}
                       </TableCell>
                       <TableCell className="font-semibold text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs">
-                        ₹
-                        {Number(payment.amount).toLocaleString("en-IN", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        <div>
+                          ₹
+                          {Number(payment.amount).toLocaleString("en-IN", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </div>
+                        {Number(payment.mediator_amount || 0) > 0 && (
+                          <div className="text-[11px] text-slate-600 font-normal">
+                            Net ₹
+                            {Number(
+                              payment.net_amount ?? payment.amount,
+                            ).toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </div>
+                        )}
+                        {Number(payment.tds_amount || 0) > 0 && (
+                          <div className="text-[11px] text-blue-700 font-normal">
+                            TDS ₹
+                            {Number(payment.tds_amount || 0).toLocaleString(
+                              "en-IN",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="hidden md:table-cell capitalize px-2 sm:px-4 py-2 sm:py-3 text-xs">
                         {payment.payment_method.replace("_", " ")}

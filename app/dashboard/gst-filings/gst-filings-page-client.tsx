@@ -51,6 +51,11 @@ interface RawInvoice {
         } | null;
       }>
     | null;
+  payments:
+    | Array<{
+        tds_amount: string | number | null;
+      }>
+    | null;
 }
 
 interface GstRow {
@@ -66,6 +71,7 @@ interface GstRow {
   sgst: number;
   igst: number;
   totalAmount: number;
+  tdsAmount: number;
 }
 
 interface GstFilingsPageClientProps {
@@ -152,6 +158,11 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
         }
       });
 
+      const tdsAmount = (invoice.payments || []).reduce(
+        (sum, payment) => sum + Number(payment.tds_amount || 0),
+        0,
+      );
+
       return {
         id: invoice.id,
         date: invoice.issue_date,
@@ -165,6 +176,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
         sgst,
         igst,
         totalAmount,
+        tdsAmount,
       } satisfies GstRow;
     });
 
@@ -235,6 +247,10 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
           aValue = a.totalAmount;
           bValue = b.totalAmount;
           break;
+        case "tdsAmount":
+          aValue = a.tdsAmount;
+          bValue = b.tdsAmount;
+          break;
         default:
           return 0;
       }
@@ -256,6 +272,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
           sgst: acc.sgst + row.sgst,
           igst: acc.igst + row.igst,
           totalAmount: acc.totalAmount + row.totalAmount,
+          tdsAmount: acc.tdsAmount + row.tdsAmount,
         }),
         {
           transactionValue: 0,
@@ -263,6 +280,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
           sgst: 0,
           igst: 0,
           totalAmount: 0,
+          tdsAmount: 0,
         },
       ),
     [processedRows],
@@ -284,6 +302,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
       sgst: row.sgst.toFixed(2),
       igst: row.igst.toFixed(2),
       totalAmount: row.totalAmount.toFixed(2),
+      tdsAmount: row.tdsAmount.toFixed(2),
     }));
 
     const columns: ExportColumn[] = [
@@ -299,6 +318,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
       { key: "sgst", label: "SGST" },
       { key: "igst", label: "IGST" },
       { key: "totalAmount", label: "Total Amount" },
+      { key: "tdsAmount", label: "TDS" },
     ];
 
     exportToCSV(exportRows, columns, `gst-filing-${getTimestamp()}.csv`);
@@ -325,6 +345,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
       sgst: row.sgst.toFixed(2),
       igst: row.igst.toFixed(2),
       totalAmount: row.totalAmount.toFixed(2),
+      tdsAmount: row.tdsAmount.toFixed(2),
     }));
 
     const columns: ExportColumn[] = [
@@ -340,6 +361,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
       { key: "sgst", label: "SGST" },
       { key: "igst", label: "IGST" },
       { key: "totalAmount", label: "TOTAL" },
+      { key: "tdsAmount", label: "TDS" },
     ];
 
     await exportToPDF(
@@ -463,7 +485,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Card className="border-border/70 shadow-sm">
           <CardContent className="p-4">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Invoices</p>
@@ -488,11 +510,17 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
             <p className="mt-2 text-2xl font-semibold">{formatNumber(totals.totalAmount)}</p>
           </CardContent>
         </Card>
+        <Card className="border-border/70 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total TDS</p>
+            <p className="mt-2 text-2xl font-semibold text-blue-700">{formatNumber(totals.tdsAmount)}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="rounded-xl border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <Table className="min-w-[1450px] text-xs sm:text-sm">
+          <Table className="min-w-[1580px] text-xs sm:text-sm">
           <TableHeader>
             <TableRow>
               <TableHead className="w-[70px]">SL.NO</TableHead>
@@ -507,6 +535,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
               <TableHead className="cursor-pointer text-right" onClick={() => handleSort("sgst")}>SGST<SortIcon column="sgst" /></TableHead>
               <TableHead className="cursor-pointer text-right" onClick={() => handleSort("igst")}>IGST<SortIcon column="igst" /></TableHead>
               <TableHead className="cursor-pointer text-right" onClick={() => handleSort("totalAmount")}>Total Amount<SortIcon column="totalAmount" /></TableHead>
+              <TableHead className="cursor-pointer text-right" onClick={() => handleSort("tdsAmount")}>TDS<SortIcon column="tdsAmount" /></TableHead>
             </TableRow>
             <TableRow>
               <TableHead></TableHead>
@@ -549,12 +578,13 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
               <TableHead></TableHead>
               <TableHead></TableHead>
               <TableHead></TableHead>
+              <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {pagination.paginatedItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center text-muted-foreground py-16">
+                <TableCell colSpan={13} className="text-center text-muted-foreground py-16">
                   No GST filing rows found for the selected filters.
                 </TableCell>
               </TableRow>
@@ -573,6 +603,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
                   <TableCell className="text-right">{formatNumber(row.sgst)}</TableCell>
                   <TableCell className="text-right">{formatNumber(row.igst)}</TableCell>
                   <TableCell className="text-right font-semibold">{formatNumber(row.totalAmount)}</TableCell>
+                  <TableCell className="text-right font-semibold text-blue-700">{formatNumber(row.tdsAmount)}</TableCell>
                 </TableRow>
               ))
             )}
@@ -585,6 +616,7 @@ export function GstFilingsPageClient({ clients, invoices }: GstFilingsPageClient
                 <TableCell className="text-right">{formatNumber(totals.sgst)}</TableCell>
                 <TableCell className="text-right">{formatNumber(totals.igst)}</TableCell>
                 <TableCell className="text-right">{formatNumber(totals.totalAmount)}</TableCell>
+                <TableCell className="text-right text-blue-700">{formatNumber(totals.tdsAmount)}</TableCell>
               </TableRow>
             )}
           </TableBody>

@@ -45,6 +45,7 @@ interface Invoice {
 interface Client {
   id: string;
   name: string;
+  through_mediator?: boolean | null;
 }
 
 interface PaymentFormProps {
@@ -82,6 +83,10 @@ export function PaymentForm({
     reference_number: "",
     status: "completed",
     notes: "",
+    tds_amount: "",
+    mediator_deduction_type: "percentage",
+    mediator_percentage: "",
+    mediator_amount: "",
   });
 
   const invoiceById = useMemo(() => {
@@ -96,6 +101,19 @@ export function PaymentForm({
     () => (selectedClientId ? invoices.filter((inv) => inv.client_id === selectedClientId) : invoices),
     [invoices, selectedClientId],
   );
+
+  const clientById = useMemo(() => {
+    const lookup = new Map<string, Client>();
+    for (const client of clients) {
+      lookup.set(client.id, client);
+    }
+    return lookup;
+  }, [clients]);
+
+  const activeClientId =
+    paymentMode === "bulk" ? selectedClientId : selectedInvoice?.client_id || null;
+  const activeClient = activeClientId ? clientById.get(activeClientId) : null;
+  const isMediatorClient = Boolean(activeClient?.through_mediator);
 
   const invoiceOptions = useMemo(
     () =>
@@ -186,6 +204,16 @@ export function PaymentForm({
     }
   }, [formData.invoice_id, invoiceById, formData.amount, autoFilledInvoiceId]);
 
+  useEffect(() => {
+    if (!isMediatorClient) {
+      setFormData((prev) => ({
+        ...prev,
+        mediator_percentage: "",
+        mediator_amount: "",
+      }));
+    }
+  }, [isMediatorClient]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -219,16 +247,56 @@ export function PaymentForm({
       }
 
       const paymentAmount = Number(formData.amount);
+      const tdsAmount = Number(formData.tds_amount || 0);
+      const totalPaymentContribution = Number(
+        (paymentAmount + Math.max(0, tdsAmount)).toFixed(2),
+      );
+      const mediatorPercent = Number(formData.mediator_percentage || 0);
+      const mediatorAmountInput = Number(formData.mediator_amount || 0);
+
+      if (tdsAmount < 0) {
+        throw new Error("TDS amount cannot be negative.");
+      }
+
+      if (isMediatorClient && formData.mediator_deduction_type === "percentage") {
+        if (mediatorPercent < 0 || mediatorPercent > 100) {
+          throw new Error("Mediator percentage must be between 0 and 100.");
+        }
+      }
+
+      if (isMediatorClient && formData.mediator_deduction_type === "amount") {
+        if (mediatorAmountInput < 0 || mediatorAmountInput > paymentAmount) {
+          throw new Error("Mediator amount cannot exceed payment amount.");
+        }
+      }
+
+      const mediatorDeductionAmount = isMediatorClient
+        ? formData.mediator_deduction_type === "percentage"
+          ? Number(((paymentAmount * mediatorPercent) / 100).toFixed(2))
+          : Number(mediatorAmountInput.toFixed(2))
+        : 0;
+      const netAmount = Number((paymentAmount - mediatorDeductionAmount).toFixed(2));
 
       if (paymentMode === "bulk" && selectedClientId) {
         // Bulk payment mode: allocate payment to client's unpaid invoices
-        let remainingAmount = paymentAmount;
+        let remainingAmount = totalPaymentContribution;
         const unpaidInvoices = clientOutstandingInvoices;
 
         // Create a single payment record for tracking
         const { error: paymentError } = await supabase.from("payments").insert({
           invoice_id: unpaidInvoices[0]?.id || formData.invoice_id, // Link to first unpaid invoice
           amount: formData.amount,
+          tds_amount: tdsAmount,
+          mediator_deduction_type: isMediatorClient
+            ? formData.mediator_deduction_type
+            : null,
+          mediator_percentage: isMediatorClient
+            ? (formData.mediator_deduction_type === "percentage"
+              ? mediatorPercent
+              : null)
+            : null,
+          mediator_amount: mediatorDeductionAmount,
+          net_amount: netAmount,
           payment_date: formData.payment_date,
           payment_method: formData.payment_method,
           reference_number: formData.reference_number || null,
@@ -273,7 +341,7 @@ export function PaymentForm({
         toast({
           variant: "success",
           title: "Bulk payment recorded",
-          description: `₹${paymentAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} allocated across ${unpaidInvoices.length} invoices.`,
+          description: `₹${totalPaymentContribution.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (including TDS) allocated across ${unpaidInvoices.length} invoices.`,
         });
       } else {
         // Individual invoice payment mode
@@ -283,6 +351,17 @@ export function PaymentForm({
         const { error: paymentError } = await supabase.from("payments").insert({
           invoice_id: formData.invoice_id,
           amount: formData.amount,
+          tds_amount: tdsAmount,
+          mediator_deduction_type: isMediatorClient
+            ? formData.mediator_deduction_type
+            : null,
+          mediator_percentage: isMediatorClient
+            ? (formData.mediator_deduction_type === "percentage"
+              ? mediatorPercent
+              : null)
+            : null,
+          mediator_amount: mediatorDeductionAmount,
+          net_amount: netAmount,
           payment_date: formData.payment_date,
           payment_method: formData.payment_method,
           reference_number: formData.reference_number || null,
@@ -296,7 +375,7 @@ export function PaymentForm({
 
         // Update invoice amount_paid
         const newAmountPaid =
-          Number(selectedInvoice.amount_paid) + Number(formData.amount);
+          Number(selectedInvoice.amount_paid) + totalPaymentContribution;
         const totalAmount = Number(selectedInvoice.total_amount);
         const paidOff = newAmountPaid >= totalAmount - 0.01;
 
@@ -322,7 +401,10 @@ export function PaymentForm({
       toast({
         variant: "success",
         title: "Payment recorded",
-        description: `₹${Number(formData.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} payment has been recorded successfully.`,
+        description:
+          isMediatorClient && mediatorDeductionAmount > 0
+            ? `Paid ₹${paymentAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, TDS ₹${tdsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, mediator deduction ₹${mediatorDeductionAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, net received ₹${netAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
+            : `Paid ₹${paymentAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + TDS ₹${tdsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} recorded successfully.`,
       });
 
       router.push("/dashboard/payments");
@@ -345,7 +427,20 @@ export function PaymentForm({
     ? Number(selectedInvoice.total_amount) - Number(selectedInvoice.amount_paid)
     : 0;
   const paymentAmount = Number(formData.amount) || 0;
-  const remainingBalance = balance - paymentAmount;
+  const tdsAmount = Number(formData.tds_amount) || 0;
+  const totalPaymentContribution = paymentAmount + tdsAmount;
+  const mediatorDeductionAmount = isMediatorClient
+    ? formData.mediator_deduction_type === "percentage"
+      ? Number(
+          (
+            (paymentAmount * Number(formData.mediator_percentage || 0)) /
+            100
+          ).toFixed(2),
+        )
+      : Number(Number(formData.mediator_amount || 0).toFixed(2))
+    : 0;
+  const netReceivedAmount = Math.max(0, paymentAmount - mediatorDeductionAmount);
+  const remainingBalance = balance - totalPaymentContribution;
 
   return (
     <Card>
@@ -441,12 +536,24 @@ export function PaymentForm({
                       </span>
                     </div>
 
-                    {Number(formData.amount) > 0 && (
+                    {paymentAmount > 0 || tdsAmount > 0 ? (
                       <div className="mt-3 pt-3 border-t border-blue-300">
                         <div className="flex justify-between text-sm">
                           <span className="text-blue-700">Payment Amount:</span>
                           <span className="font-medium text-green-600">
-                            ₹{Number(formData.amount).toFixed(2)}
+                            ₹{paymentAmount.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-blue-700">TDS:</span>
+                          <span className="font-medium text-green-600">
+                            ₹{tdsAmount.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-blue-700">Total Considered:</span>
+                          <span className="font-medium text-green-700">
+                            ₹{totalPaymentContribution.toFixed(2)}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm font-bold mt-2">
@@ -455,29 +562,27 @@ export function PaymentForm({
                           </span>
                           <span
                             className={
-                              clientTotalPending - Number(formData.amount) > 0
+                              clientTotalPending - totalPaymentContribution > 0
                                 ? "text-orange-600"
                                 : "text-green-600"
                             }
                           >
                             ₹
-                            {(
-                              clientTotalPending - Number(formData.amount)
-                            ).toFixed(2)}
+                            {(clientTotalPending - totalPaymentContribution).toFixed(2)}
                           </span>
                         </div>
-                        {clientTotalPending - Number(formData.amount) === 0 && (
+                        {clientTotalPending - totalPaymentContribution === 0 && (
                           <p className="text-xs text-green-600 mt-1">
                             ✓ All invoices will be fully paid
                           </p>
                         )}
-                        {clientTotalPending - Number(formData.amount) > 0 && (
+                        {clientTotalPending - totalPaymentContribution > 0 && (
                           <p className="text-xs text-orange-600 mt-1">
                             ⚠ Partial payment - balance remains
                           </p>
                         )}
                       </div>
-                    )}
+                    ) : null}
 
                     <div className="pt-3 border-t border-blue-300">
                       <p className="text-sm text-blue-700">
@@ -536,6 +641,18 @@ export function PaymentForm({
                         <span className="text-blue-700">Payment Amount:</span>
                         <span className="font-medium text-green-600">
                           ₹{paymentAmount.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-blue-700">TDS:</span>
+                        <span className="font-medium text-green-600">
+                          ₹{tdsAmount.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-blue-700">Total Considered:</span>
+                        <span className="font-medium text-green-700">
+                          ₹{totalPaymentContribution.toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm font-bold mt-2">
@@ -602,12 +719,15 @@ export function PaymentForm({
                       onClick={() =>
                         setFormData({
                           ...formData,
-                          amount: clientTotalPending.toFixed(2),
+                          amount: Math.max(
+                            0,
+                            clientTotalPending - tdsAmount,
+                          ).toFixed(2),
                         })
                       }
                       className="ml-1 text-blue-600 hover:underline"
                     >
-                      Full Amount
+                      Full Amount (after TDS)
                     </button>
                   </>
                 ) : (
@@ -616,15 +736,33 @@ export function PaymentForm({
                     <button
                       type="button"
                       onClick={() =>
-                        setFormData({ ...formData, amount: balance.toFixed(2) })
+                        setFormData({
+                          ...formData,
+                          amount: Math.max(0, balance - tdsAmount).toFixed(2),
+                        })
                       }
                       className="ml-1 text-blue-600 hover:underline"
                     >
-                      Pay Full Amount
+                      Pay Full Amount (after TDS)
                     </button>
                   </>
                 )}
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tds_amount">TDS (Optional)</Label>
+              <Input
+                id="tds_amount"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.tds_amount}
+                onChange={(e) =>
+                  setFormData({ ...formData, tds_amount: e.target.value })
+                }
+                placeholder="Enter TDS amount"
+              />
             </div>
 
             <div className="space-y-2">
@@ -670,6 +808,98 @@ export function PaymentForm({
               />
             </div>
           </div>
+
+          {isMediatorClient && (
+            <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <h4 className="font-semibold text-amber-900">
+                Mediator Deduction
+              </h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="mediator_deduction_type">
+                    Deduction Type
+                  </Label>
+                  <SearchableSelect
+                    id="mediator_deduction_type"
+                    value={formData.mediator_deduction_type}
+                    onValueChange={(value) =>
+                      setFormData({
+                        ...formData,
+                        mediator_deduction_type: value,
+                        mediator_percentage:
+                          value === "percentage"
+                            ? formData.mediator_percentage
+                            : "",
+                        mediator_amount:
+                          value === "amount" ? formData.mediator_amount : "",
+                      })
+                    }
+                    options={[
+                      { value: "percentage", label: "Percentage (%)" },
+                      { value: "amount", label: "Fixed Amount (Rs.)" },
+                    ]}
+                    placeholder="Select deduction type"
+                    searchPlaceholder="Type deduction type..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  {formData.mediator_deduction_type === "percentage" ? (
+                    <>
+                      <Label htmlFor="mediator_percentage">Mediator %</Label>
+                      <Input
+                        id="mediator_percentage"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={formData.mediator_percentage}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            mediator_percentage: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. 5"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Label htmlFor="mediator_amount">Mediator Amount</Label>
+                      <Input
+                        id="mediator_amount"
+                        type="number"
+                        min="0"
+                        max={paymentAmount || undefined}
+                        step="0.01"
+                        value={formData.mediator_amount}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            mediator_amount: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. 250.00"
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="grid gap-2 text-sm md:grid-cols-2">
+                <div className="flex justify-between rounded-md bg-white p-2">
+                  <span className="text-muted-foreground">Deduction</span>
+                  <span className="font-medium text-amber-700">
+                    ₹{mediatorDeductionAmount.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between rounded-md bg-white p-2">
+                  <span className="text-muted-foreground">Net Received</span>
+                  <span className="font-semibold text-green-700">
+                    ₹{netReceivedAmount.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="status">
