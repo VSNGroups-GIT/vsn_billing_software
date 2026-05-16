@@ -15,6 +15,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ClientSelector } from "@/components/client-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  buildBulkPaymentNotes,
+  computeInvoiceStatus,
+  splitBulkContribution,
+} from "@/lib/payment-invoice-sync";
 
 const paymentMethodOptions = [
   { value: "cash", label: "Cash" },
@@ -278,53 +283,68 @@ export function PaymentForm({
       const netAmount = Number((paymentAmount - mediatorDeductionAmount).toFixed(2));
 
       if (paymentMode === "bulk" && selectedClientId) {
-        // Bulk payment mode: allocate payment to client's unpaid invoices
+        // Bulk payment mode: one payment row per allocated invoice for correct reversal on delete
         let remainingAmount = totalPaymentContribution;
         const unpaidInvoices = clientOutstandingInvoices;
+        const bulkBatchId = crypto.randomUUID();
+        const bulkNotes = buildBulkPaymentNotes(
+          bulkBatchId,
+          unpaidInvoices.length,
+          formData.notes,
+        );
 
-        // Create a single payment record for tracking
-        const { error: paymentError } = await supabase.from("payments").insert({
-          invoice_id: unpaidInvoices[0]?.id || formData.invoice_id, // Link to first unpaid invoice
-          amount: formData.amount,
-          tds_amount: tdsAmount,
-          mediator_deduction_type: isMediatorClient
-            ? formData.mediator_deduction_type
-            : null,
-          mediator_percentage: isMediatorClient
-            ? (formData.mediator_deduction_type === "percentage"
-              ? mediatorPercent
-              : null)
-            : null,
-          mediator_amount: mediatorDeductionAmount,
-          net_amount: netAmount,
-          payment_date: formData.payment_date,
-          payment_method: formData.payment_method,
-          reference_number: formData.reference_number || null,
-          status: formData.status,
-          notes: `Bulk payment for client - allocated across ${unpaidInvoices.length} invoices. ${formData.notes || ""}`,
-          created_by: user.id,
-          organization_id: profile.organization_id,
-        });
-
-        if (paymentError) throw paymentError;
-
-        // Allocate payment across invoices
         for (const invoice of unpaidInvoices) {
           if (remainingAmount <= 0) break;
 
           const pending =
             Number(invoice.total_amount) - Number(invoice.amount_paid);
           const allocationAmount = Math.min(remainingAmount, pending);
+          if (allocationAmount <= 0) continue;
+
+          const { amount: rowAmount, tds_amount: rowTds } = splitBulkContribution(
+            allocationAmount,
+            paymentAmount,
+            tdsAmount,
+            totalPaymentContribution,
+          );
+          const rowMediatorAmount = isMediatorClient
+            ? Number(
+                (
+                  (mediatorDeductionAmount * allocationAmount) /
+                  totalPaymentContribution
+                ).toFixed(2),
+              )
+            : 0;
+          const rowNetAmount = Number((rowAmount - rowMediatorAmount).toFixed(2));
+
+          const { error: paymentError } = await supabase.from("payments").insert({
+            invoice_id: invoice.id,
+            amount: rowAmount,
+            tds_amount: rowTds,
+            mediator_deduction_type: isMediatorClient
+              ? formData.mediator_deduction_type
+              : null,
+            mediator_percentage: isMediatorClient
+              ? formData.mediator_deduction_type === "percentage"
+                ? mediatorPercent
+                : null
+              : null,
+            mediator_amount: rowMediatorAmount,
+            net_amount: rowNetAmount,
+            payment_date: formData.payment_date,
+            payment_method: formData.payment_method,
+            reference_number: formData.reference_number || null,
+            status: formData.status,
+            notes: bulkNotes,
+            created_by: user.id,
+            organization_id: profile.organization_id,
+          });
+
+          if (paymentError) throw paymentError;
 
           const newAmountPaid = Number(invoice.amount_paid) + allocationAmount;
           const totalAmount = Number(invoice.total_amount);
-          const paidOff = newAmountPaid >= totalAmount - 0.01;
-          let newStatus = invoice.status;
-          if (paidOff) {
-            newStatus = "paid";
-          } else if (newAmountPaid > 0) {
-            newStatus = "partially_paid";
-          }
+          const newStatus = computeInvoiceStatus(newAmountPaid, totalAmount);
 
           const { error: invoiceError } = await supabase
             .from("invoices")

@@ -38,7 +38,6 @@ interface Quotation {
   issue_date: string;
   due_date: string;
   status: string;
-  total_amount: string;
   converted_invoice_id: string | null;
   clients: {
     name: string;
@@ -118,10 +117,6 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
             va = new Date(a.issue_date).getTime();
             vb = new Date(b.issue_date).getTime();
             break;
-          case "total":
-            va = Number(a.total_amount);
-            vb = Number(b.total_amount);
-            break;
           case "status":
             va = a.status;
             vb = b.status;
@@ -168,8 +163,11 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
       quotation_number: q.quotation_number,
       client: q.clients.name,
       type: q.quotation_type === "whatsapp" ? "WhatsApp" : "Other",
-      issue_date: new Date(q.issue_date).toLocaleDateString("en-IN", { year: "numeric", month: "2-digit", day: "2-digit" }),
-      total_amount: Number(q.total_amount).toFixed(2),
+      issue_date: new Date(q.issue_date).toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }),
       status: statusConfig[q.status]?.label || q.status,
       created_by: q.profiles?.full_name || q.profiles?.email || "-",
     }));
@@ -179,7 +177,6 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
       { key: "client", label: "Client" },
       { key: "type", label: "Type" },
       { key: "issue_date", label: "Date" },
-      { key: "total_amount", label: "Total Amount" },
       { key: "status", label: "Status" },
       { key: "created_by", label: "Created By" },
     ];
@@ -195,8 +192,11 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
       quotation_number: q.quotation_number,
       client: q.clients.name,
       type: q.quotation_type === "whatsapp" ? "WhatsApp" : "Other",
-      issue_date: new Date(q.issue_date).toLocaleDateString("en-IN", { year: "numeric", month: "2-digit", day: "2-digit" }),
-      total_amount: `Rs.${Number(q.total_amount).toFixed(2)}`,
+      issue_date: new Date(q.issue_date).toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }),
       status: statusConfig[q.status]?.label || q.status,
       created_by: q.profiles?.full_name || q.profiles?.email || "-",
     }));
@@ -206,7 +206,6 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
       { key: "client", label: "Client" },
       { key: "type", label: "Type" },
       { key: "issue_date", label: "Date" },
-      { key: "total_amount", label: "Total" },
       { key: "status", label: "Status" },
       { key: "created_by", label: "Created By" },
     ];
@@ -234,7 +233,7 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
     setDeletingId(null);
   };
 
-  const colSpan = showCreatedBy ? 8 : 7;
+  const colSpan = showCreatedBy ? 7 : 6;
 
   return (
     <>
@@ -278,9 +277,6 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
               <TableHead className="cursor-pointer" onClick={() => handleSort("issue_date")}>
                 Date <SortIcon column="issue_date" />
               </TableHead>
-              <TableHead className="cursor-pointer text-right" onClick={() => handleSort("total")}>
-                Total <SortIcon column="total" />
-              </TableHead>
               <TableHead className="cursor-pointer" onClick={() => handleSort("status")}>
                 Status <SortIcon column="status" />
               </TableHead>
@@ -309,7 +305,6 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
                   onChange={(e) => setFilters((p) => ({ ...p, client: e.target.value }))}
                 />
               </TableHead>
-              <TableHead />
               <TableHead />
               <TableHead />
               <TableHead>
@@ -354,7 +349,6 @@ export function QuotationsTable({ quotations, userRole, toolbarLeft }: Quotation
                       </Badge>
                     </TableCell>
                     <TableCell>{new Date(q.issue_date).toLocaleDateString("en-IN")}</TableCell>
-                    <TableCell className="text-right">Rs. {Number(q.total_amount).toFixed(2)}</TableCell>
                     <TableCell>
                       <Badge className={cfg.className}>{cfg.label}</Badge>
                     </TableCell>

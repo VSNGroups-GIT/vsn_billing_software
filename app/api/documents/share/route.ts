@@ -462,6 +462,7 @@ export async function POST(req: NextRequest) {
       let itemRows = "";
       let extraWhatsappCategoryTable = "";
       let introText = "";
+      let isWhatsappQuotation = false;
 
       if (isInvoice) {
         const { data: detailedInvoice, error: detailError } = await supabase
@@ -525,7 +526,8 @@ export async function POST(req: NextRequest) {
         taxAmount = (subtotal * Number(detailedQuotation.gst_percent || 0)) / 100;
         discountAmount = 0;
         totalAmount = Number(detailedQuotation.total_amount || 0);
-        introText = detailedQuotation.quotation_type === "whatsapp"
+        isWhatsappQuotation = detailedQuotation.quotation_type === "whatsapp";
+        introText = isWhatsappQuotation
           ? "We are one of the Leading WhatsApp service providers & SMS Services"
           : "We are pleased to share our quotation for the following services.";
 
@@ -578,6 +580,7 @@ export async function POST(req: NextRequest) {
       const balanceDue = totalAmount - amountPaid;
       const amountInWords = numberToWords(totalAmount);
       const roundOff = totalAmount - (subtotal + taxAmount - discountAmount);
+      const itemsTableColSpan = 5;
       const shouldShowRoundOff = Math.abs(roundOff) <= 0.5;
       const activeTaxLabel = template?.tax_label === "GST" ? "IGST" : (template?.tax_label || "IGST");
 
@@ -664,13 +667,13 @@ export async function POST(req: NextRequest) {
                 </tr>
               </thead>
               <tbody>
-                ${itemRows || `<tr><td colspan="5" style="border: 1px solid #94a3b8; padding: 10px; text-align: center; color: #64748b;">No line items</td></tr>`}
+                ${itemRows || `<tr><td colspan="${itemsTableColSpan}" style="border: 1px solid #94a3b8; padding: 10px; text-align: center; color: #64748b;">No line items</td></tr>`}
               </tbody>
             </table>
 
             ${extraWhatsappCategoryTable}
 
-            ${!isInvoice ? `<table style="margin-left: auto; min-width: 320px; border-collapse: collapse; font-size: 13px; margin-bottom: 12px;">
+            ${!isInvoice && isWhatsappQuotation ? `<table style="margin-left: auto; min-width: 320px; border-collapse: collapse; font-size: 13px; margin-bottom: 12px;">
               <tr><td style="padding: 4px 0; color: #475569;">Subtotal</td><td style="padding: 4px 0; text-align: right;">${formatCurrency(subtotal)}</td></tr>
               <tr><td style="padding: 4px 0; color: #475569;">Tax</td><td style="padding: 4px 0; text-align: right;">${formatCurrency(taxAmount)}</td></tr>
               <tr><td style="padding: 4px 0; color: #475569;">Discount</td><td style="padding: 4px 0; text-align: right;">-${formatCurrency(discountAmount)}</td></tr>
@@ -761,13 +764,13 @@ export async function POST(req: NextRequest) {
     } else {
       const { data: detailedQuotation } = await supabase
         .from("quotations")
-        .select("issue_date, total_amount")
+        .select("issue_date")
         .eq("id", documentId)
         .eq("organization_id", profile.organization_id)
         .maybeSingle();
 
       waIssueDate = formatDate(detailedQuotation?.issue_date);
-      waTotalAmount = formatCurrency(detailedQuotation?.total_amount || 0);
+      waTotalAmount = "—";
       waSummaryText = `Please find your quotation${documentNumber ? ` (${documentNumber})` : ""}.`;
     }
 

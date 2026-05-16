@@ -37,6 +37,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSVAsync, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
+import {
+  computeInvoiceStatus,
+  getPaymentContribution,
+  isBulkPayment,
+  parseBulkBatchId,
+} from "@/lib/payment-invoice-sync";
 import { Input } from "@/components/ui/input";
 
 interface Payment {
@@ -222,15 +228,46 @@ export function PaymentsTable({
     );
   };
 
+  const reverseInvoicePayment = async (
+    supabase: ReturnType<typeof createClient>,
+    invoiceId: string,
+    contribution: number,
+  ) => {
+    const { data: invoice, error: invoiceFetchError } = await supabase
+      .from("invoices")
+      .select("amount_paid, total_amount")
+      .eq("id", invoiceId)
+      .maybeSingle();
+
+    if (invoiceFetchError || !invoice) {
+      throw new Error("Failed to fetch invoice details.");
+    }
+
+    const newAmountPaid = Math.max(
+      0,
+      Number(invoice.amount_paid || 0) - contribution,
+    );
+    const totalAmount = Number(invoice.total_amount || 0);
+    const newStatus = computeInvoiceStatus(newAmountPaid, totalAmount);
+
+    const { error: updateError } = await supabase
+      .from("invoices")
+      .update({ amount_paid: newAmountPaid, status: newStatus })
+      .eq("id", invoiceId);
+
+    if (updateError) {
+      throw new Error("Failed to update invoice status.");
+    }
+  };
+
   const handleDelete = async (id: string) => {
     setIsDeleting(true);
     const supabase = createClient();
 
     try {
-      // First, fetch the payment to get invoice_id and amount
       const { data: payment, error: fetchError } = await supabase
         .from("payments")
-        .select("invoice_id, amount")
+        .select("id, invoice_id, amount, tds_amount, notes")
         .eq("id", id)
         .maybeSingle();
 
@@ -240,7 +277,6 @@ export function PaymentsTable({
           title: "Error",
           description: "Failed to fetch payment details.",
         });
-        setIsDeleting(false);
         return;
       }
 
@@ -250,7 +286,6 @@ export function PaymentsTable({
           title: "Error",
           description: "Payment not found.",
         });
-        setIsDeleting(false);
         return;
       }
 
@@ -260,93 +295,155 @@ export function PaymentsTable({
           title: "Error",
           description: "Payment has no associated invoice.",
         });
-        setIsDeleting(false);
         return;
       }
 
-      // Fetch invoice details FIRST before deleting
-      const { data: invoice, error: invoiceFetchError } = await supabase
-        .from("invoices")
-        .select("amount_paid, total_amount")
-        .eq("id", payment.invoice_id)
-        .maybeSingle();
+      const batchId = parseBulkBatchId(payment.notes);
+      const bulk = isBulkPayment(payment.notes);
 
-      if (invoiceFetchError) {
+      if (bulk && batchId) {
+        const { data: batchPayments, error: batchError } = await supabase
+          .from("payments")
+          .select("id, invoice_id, amount, tds_amount")
+          .ilike("notes", `%[batch:${batchId}]%`);
+
+        if (batchError || !batchPayments?.length) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to load bulk payment records.",
+          });
+          return;
+        }
+
+        for (const batchPayment of batchPayments) {
+          if (!batchPayment.invoice_id) continue;
+          await reverseInvoicePayment(
+            supabase,
+            batchPayment.invoice_id,
+            getPaymentContribution(batchPayment),
+          );
+        }
+
+        const { error: deleteError } = await supabase
+          .from("payments")
+          .delete()
+          .in(
+            "id",
+            batchPayments.map((row) => row.id),
+          );
+
+        if (deleteError) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to delete bulk payment records.",
+          });
+          return;
+        }
+
         toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch invoice details.",
+          variant: "success",
+          title: "Bulk payment deleted",
+          description: `Removed ${batchPayments.length} payment record(s) and updated all related invoices.`,
         });
-        setIsDeleting(false);
-        return;
-      }
+      } else if (bulk) {
+        // Legacy bulk payment (single row allocated across multiple invoices)
+        const contribution = getPaymentContribution(payment);
+        const { data: anchorInvoice, error: anchorError } = await supabase
+          .from("invoices")
+          .select("client_id")
+          .eq("id", payment.invoice_id)
+          .maybeSingle();
 
-      if (!invoice) {
+        if (anchorError || !anchorInvoice?.client_id) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to resolve client for bulk payment reversal.",
+          });
+          return;
+        }
+
+        const { data: clientInvoices, error: clientInvoicesError } = await supabase
+          .from("invoices")
+          .select("id, amount_paid, total_amount, issue_date")
+          .eq("client_id", anchorInvoice.client_id)
+          .order("issue_date", { ascending: true });
+
+        if (clientInvoicesError || !clientInvoices) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to load client invoices for bulk reversal.",
+          });
+          return;
+        }
+
+        let remaining = contribution;
+        for (const invoice of clientInvoices) {
+          if (remaining <= 0) break;
+          const reverseAmount = Math.min(
+            remaining,
+            Number(invoice.amount_paid || 0),
+          );
+          if (reverseAmount <= 0) continue;
+
+          await reverseInvoicePayment(supabase, invoice.id, reverseAmount);
+          remaining -= reverseAmount;
+        }
+
+        const { error: deleteError } = await supabase
+          .from("payments")
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to delete payment.",
+          });
+          return;
+        }
+
         toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Associated invoice not found.",
-        });
-        setIsDeleting(false);
-        return;
-      }
-
-      // Calculate new amounts BEFORE deletion
-      const newAmountPaid = Math.max(
-        0,
-        Number(invoice.amount_paid || 0) - Number(payment.amount || 0),
-      );
-      const totalAmount = Number(invoice.total_amount || 0);
-
-      // Determine status based on payment amount
-      let newStatus = "recorded";
-      if (newAmountPaid > 0 && newAmountPaid < totalAmount) {
-        newStatus = "partially_paid";
-      } else if (newAmountPaid >= totalAmount) {
-        newStatus = "paid";
-      }
-
-      // Now delete the payment
-      const { error: deleteError } = await supabase
-        .from("payments")
-        .delete()
-        .eq("id", id);
-
-      if (deleteError) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to delete payment.",
-        });
-        setIsDeleting(false);
-        return;
-      }
-
-      // Update the invoice after successful payment deletion
-      const { error: updateError } = await supabase
-        .from("invoices")
-        .update({ amount_paid: newAmountPaid, status: newStatus })
-        .eq("id", payment.invoice_id);
-
-      if (updateError) {
-        toast({
-          variant: "destructive",
-          title: "Error",
+          variant: "success",
+          title: "Bulk payment deleted",
           description:
-            "Payment deleted but failed to update invoice status. Please refresh the page.",
+            "The bulk payment was removed and related invoice balances were updated.",
         });
-        setIsDeleting(false);
-        return;
+      } else {
+        await reverseInvoicePayment(
+          supabase,
+          payment.invoice_id,
+          getPaymentContribution(payment),
+        );
+
+        const { error: deleteError } = await supabase
+          .from("payments")
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to delete payment.",
+          });
+          return;
+        }
+
+        toast({
+          variant: "success",
+          title: "Payment deleted",
+          description:
+            "The payment has been deleted and the invoice balance was updated.",
+        });
       }
 
-      toast({
-        variant: "success",
-        title: "Payment deleted",
-        description:
-          "The payment has been deleted successfully and invoice status has been updated.",
-      });
       router.refresh();
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Error",
@@ -479,6 +576,8 @@ export function PaymentsTable({
     });
   };
 
+  const colSpan = showCreatedBy ? 9 : 8;
+
   return (
     <>
       <div className="flex flex-col gap-3 sm:gap-4 mb-4">
@@ -509,16 +608,8 @@ export function PaymentsTable({
         </div>
       </div>
 
-      {processedPayments.length === 0 ? (
-        <div className="text-center py-12 border rounded-lg bg-white">
-          <p className="text-muted-foreground">
-            No payments found for the selected filters.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="rounded-lg border bg-white overflow-x-auto">
-            <Table className="text-xs sm:text-sm">
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <Table className="text-xs sm:text-sm">
               <TableHeader>
                 <TableRow>
                   <TableHead
@@ -630,7 +721,17 @@ export function PaymentsTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagination.paginatedItems.map((payment) => {
+                {pagination.paginatedItems.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={colSpan}
+                      className="text-center text-muted-foreground py-12"
+                    >
+                      No payments found for the selected filters.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  pagination.paginatedItems.map((payment) => {
                   const config =
                     statusConfig[payment.status as keyof typeof statusConfig];
 
@@ -736,21 +837,20 @@ export function PaymentsTable({
                       </TableCell>
                     </TableRow>
                   );
-                })}
+                })
+                )}
               </TableBody>
             </Table>
-          </div>
+      </div>
 
-          <TablePagination
-            currentPage={pagination.currentPage}
-            totalPages={pagination.totalPages}
-            totalItems={pagination.totalItems}
-            itemsPerPage={itemsPerPage}
-            onPageChange={pagination.goToPage}
-            onItemsPerPageChange={setItemsPerPage}
-          />
-        </>
-      )}
+      <TablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={pagination.goToPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

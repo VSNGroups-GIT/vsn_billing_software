@@ -388,6 +388,8 @@ export function InvoicesTable({
     });
   };
 
+  const colSpan = showCreatedBy ? 11 : 10;
+
   return (
     <>
       <div className="flex flex-col gap-3 sm:gap-4 mb-4">
@@ -418,16 +420,8 @@ export function InvoicesTable({
         </div>
       </div>
 
-      {processedInvoices.length === 0 ? (
-        <div className="text-center py-12 border rounded-lg bg-white">
-          <p className="text-muted-foreground">
-            No invoices found for the selected filters.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="rounded-lg border bg-white overflow-x-auto">
-            <Table className="text-xs sm:text-sm">
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <Table className="text-xs sm:text-sm">
               <TableHeader>
                 <TableRow>
                   <TableHead
@@ -552,7 +546,17 @@ export function InvoicesTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagination.paginatedItems.map((invoice) => {
+                {pagination.paginatedItems.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={colSpan}
+                      className="text-center text-muted-foreground py-12"
+                    >
+                      No invoices found for the selected filters.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  pagination.paginatedItems.map((invoice) => {
                   const config =
                     statusConfig[invoice.status as keyof typeof statusConfig];
                   const balance =
@@ -705,21 +709,20 @@ export function InvoicesTable({
                       </TableCell>
                     </TableRow>
                   );
-                })}
+                })
+                )}
               </TableBody>
             </Table>
           </div>
 
-          <TablePagination
-            currentPage={pagination.currentPage}
-            totalPages={pagination.totalPages}
-            totalItems={pagination.totalItems}
-            itemsPerPage={itemsPerPage}
-            onPageChange={pagination.goToPage}
-            onItemsPerPageChange={setItemsPerPage}
-          />
-        </>
-      )}
+      <TablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={pagination.goToPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

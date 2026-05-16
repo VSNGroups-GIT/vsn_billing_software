@@ -1090,9 +1090,14 @@ export function QuotationForm({
 
       <Card>
         <CardContent className="pt-6">
-          <div className="grid gap-2 text-sm md:max-w-sm md:ml-auto">
-            <div className="flex justify-between font-bold text-base"><span>Gross Total</span><span>Rs. {totals.total_amount.toFixed(2)}</span></div>
-          </div>
+          {formData.quotation_type === "whatsapp" && (
+            <div className="grid gap-2 text-sm md:max-w-sm md:ml-auto">
+              <div className="flex justify-between font-bold text-base">
+                <span>Gross Total</span>
+                <span>Rs. {totals.total_amount.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-600 mt-4">{error}</p>}
 
