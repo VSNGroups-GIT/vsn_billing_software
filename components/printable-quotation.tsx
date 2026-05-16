@@ -379,15 +379,17 @@ export function PrintableQuotation({ quotation, template, organizationTaxId, org
                     </td>
                   </tr>
                 ))}
-                <tr>
-                  <td className="border border-slate-400 px-2 py-1">&nbsp;</td>
-                  <td className="border border-slate-400 px-2 py-1">&nbsp;</td>
-                  <td className="border border-slate-400 px-2 py-1">&nbsp;</td>
-                  <td className="border border-slate-400 px-2 py-1 text-right font-semibold">Gross Total</td>
-                  <td className="border border-slate-400 px-2 py-1 text-right text-[14px] font-bold">
-                    {formatCurrency(roundedGrossTotal)}
-                  </td>
-                </tr>
+                {isWhatsapp && (
+                  <tr>
+                    <td className="border border-slate-400 px-2 py-1">&nbsp;</td>
+                    <td className="border border-slate-400 px-2 py-1">&nbsp;</td>
+                    <td className="border border-slate-400 px-2 py-1">&nbsp;</td>
+                    <td className="border border-slate-400 px-2 py-1 text-right font-semibold">Gross Total</td>
+                    <td className="border border-slate-400 px-2 py-1 text-right text-[14px] font-bold">
+                      {formatCurrency(roundedGrossTotal)}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
 

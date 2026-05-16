@@ -549,6 +549,7 @@ function buildPdf(documentType: SharedDocumentType, payload: Awaited<ReturnType<
 function buildDocumentHtml(documentType: SharedDocumentType, payload: Awaited<ReturnType<typeof loadDocument>>) {
   const isInvoice = documentType === "invoice";
   const row = payload.row;
+  const itemsTableColSpan = 5;
   const org = asRow(row.organizations);
   const template = payload.template;
   const client = getPrimaryClient(row.clients);
@@ -687,7 +688,7 @@ function buildDocumentHtml(documentType: SharedDocumentType, payload: Awaited<Re
             </tr>
           </thead>
           <tbody>
-            ${itemRows || `<tr><td colspan="5" style="border: 1px solid #94a3b8; padding: 10px; text-align: center; color: #64748b;">No line items</td></tr>`}
+            ${itemRows || `<tr><td colspan="${itemsTableColSpan}" style="border: 1px solid #94a3b8; padding: 10px; text-align: center; color: #64748b;">No line items</td></tr>`}
           </tbody>
         </table>
 
