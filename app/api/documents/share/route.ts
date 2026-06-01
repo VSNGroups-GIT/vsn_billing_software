@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send-email";
 import { buildSignedDocumentPdfUrl } from "@/lib/document-pdf-link";
+import { getInvoiceDocumentTitle } from "@/lib/invoice-document-title";
 
 export const maxDuration = 60;
 
@@ -23,11 +24,13 @@ interface ShareDocumentClient {
   city?: string | null;
   state?: string | null;
   zip_code?: string | null;
+  tax_id?: string | null;
 }
 
 interface ShareDocumentRecord {
   id: string;
   organization_id: string;
+  status?: string | null;
   invoice_number?: string | null;
   quotation_number?: string | null;
   quotation_type?: string | null;
@@ -390,7 +393,7 @@ export async function POST(req: NextRequest) {
     const numberField = NUMBER_FIELD_BY_TYPE[documentType];
     const documentSelect = documentType === "quotation"
       ? `id, organization_id, ${numberField}, quotation_type, clients(name, email, phone)`
-      : `id, organization_id, ${numberField}, clients(name, email, phone)`;
+      : `id, organization_id, ${numberField}, status, clients(name, email, phone, tax_id)`;
 
     const { data: document, error: documentError } = await supabase
       .from(tableName)
@@ -426,6 +429,9 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       const isInvoice = documentType === "invoice";
+      const documentTitle = isInvoice
+        ? getInvoiceDocumentTitle(String(normalizedDocument.status || ""), client?.tax_id)
+        : "QUOTATION";
       const templateType = isInvoice
         ? "invoice"
         : (normalizedDocument.quotation_type === "whatsapp" ? "quotation_whatsapp" : "quotation_other");
@@ -612,7 +618,7 @@ export async function POST(req: NextRequest) {
             </div>
 
             <div style="text-align: center; margin-bottom: 14px;">
-              <span style="display: inline-block; border: 1px solid #334155; background: #f8fafc; padding: 4px 20px; border-radius: 4px; font-size: 24px; font-weight: 700; letter-spacing: 0.18em;">${isInvoice ? "INVOICE" : "QUOTATION"}</span>
+              <span style="display: inline-block; border: 1px solid #334155; background: #f8fafc; padding: 4px 20px; border-radius: 4px; font-size: 24px; font-weight: 700; letter-spacing: 0.18em;">${escapeHtml(documentTitle)}</span>
             </div>
 
             ${isInvoice ? `

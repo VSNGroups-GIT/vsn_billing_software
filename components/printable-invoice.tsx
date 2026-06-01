@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Printer } from "lucide-react";
+import { getInvoiceDocumentTitle } from "@/lib/invoice-document-title";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -377,10 +378,7 @@ export function PrintableInvoice({ invoice, template, organizationTaxId }: Print
 
   return (
     <>
-      <div className="no-print mb-3 flex items-center justify-between gap-2">
-        <Button asChild variant="outline">
-          <a href="/dashboard/invoices">Back</a>
-        </Button>
+      <div className="no-print mb-3 flex items-center justify-end gap-2">
         <Button onClick={handlePrint} disabled={isPrinting}>
           <Printer className="h-4 w-4 mr-2" />
           Print Invoice
@@ -446,7 +444,7 @@ export function PrintableInvoice({ invoice, template, organizationTaxId }: Print
 
           <div className="text-center mb-4">
             <h2 className="inline-block text-2xl font-bold tracking-[0.2em] border border-slate-600 px-6 py-1 rounded-sm bg-slate-50">
-              {invoice.status === "draft" ? "QUOTATION" : "INVOICE"}
+              {getInvoiceDocumentTitle(invoice.status, invoice.clients?.tax_id)}
             </h2>
           </div>
 
