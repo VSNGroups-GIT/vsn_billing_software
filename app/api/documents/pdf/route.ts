@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { chromium } from "playwright-core";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySignedDocumentPdfParams, type SharedDocumentType } from "@/lib/document-pdf-link";
+import { getInvoiceDocumentTitle } from "@/lib/invoice-document-title";
 
 export const maxDuration = 60;
 
@@ -173,7 +174,10 @@ function buildPdf(documentType: SharedDocumentType, payload: Awaited<ReturnType<
   const client = getPrimaryClient(row.clients);
   const items = asRows(documentType === "invoice" ? row.invoice_items : row.quotation_items);
   const number = String(row[payload.numberField] || "");
-  const title = documentType === "invoice" ? "INVOICE" : "QUOTATION";
+  const title =
+    documentType === "invoice"
+      ? getInvoiceDocumentTitle(String(row.status || ""), client.tax_id as string | null)
+      : "QUOTATION";
   const companyName = String(template.company_name || org.name || "VSN Groups");
   const companySubline = documentType === "invoice"
     ? String(template.company_address || org.address || "")
@@ -632,7 +636,7 @@ function buildDocumentHtml(documentType: SharedDocumentType, payload: Awaited<Re
         </div>
 
         <div style="text-align: center; margin-bottom: 14px;">
-          <span style="display: inline-block; border: 1px solid #334155; background: #f8fafc; padding: 4px 20px; font-size: 24px; font-weight: 700; letter-spacing: 0.18em;">${isInvoice ? "INVOICE" : "QUOTATION"}</span>
+          <span style="display: inline-block; border: 1px solid #334155; background: #f8fafc; padding: 4px 20px; font-size: 24px; font-weight: 700; letter-spacing: 0.18em;">${isInvoice ? escapeHtml(getInvoiceDocumentTitle(String(row.status || ""), client.tax_id as string | null)) : "QUOTATION"}</span>
         </div>
 
         ${isInvoice ? `
